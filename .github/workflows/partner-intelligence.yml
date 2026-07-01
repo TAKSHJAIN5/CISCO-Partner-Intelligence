@@ -30,5 +30,20 @@ jobs:
       - name: Upload Excel Report
         uses: actions/upload-artifact@v4
         with:
-          name: Cisco-Partner-Report
+          name: Cisco-Partner-Report-${{ github.run_number }}
           path: output/Cisco_Partner_Master.xlsx
+          retention-days: 30
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs-${{ github.run_number }}
+          path: data/logs/
+          retention-days: 30 
+
+      - name: Upload Run History
+        uses: actions/upload-artifact@v4
+        with:
+          name: Run-History-${{ github.run_number }}
+          path: data/run_history.csv
+          retention-days: 30

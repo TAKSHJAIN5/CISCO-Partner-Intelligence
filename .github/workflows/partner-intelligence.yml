@@ -1,4 +1,4 @@
-name: NetCom Partner Intelligence
+name: CISCO Partner Intelligence
 
 on:
   workflow_dispatch:
@@ -24,5 +24,5 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: Environment Ready
-        run: echo "GitHub Actions environment is ready."
+      -  name: Run Automation
+         run: python run_all.py

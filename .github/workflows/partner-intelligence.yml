@@ -1,0 +1,28 @@
+name: NetCom Partner Intelligence
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-environment:
+
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Python
+        run: python --version
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Environment Ready
+        run: echo "GitHub Actions environment is ready."

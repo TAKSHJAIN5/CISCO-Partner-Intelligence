@@ -1,0 +1,13 @@
+Cisco Partner Intelligence Automation Platform
+
+Version: 1.0.0
+
+Author: Taksh Jain
+
+Company: NetCom Learning
+
+Release Date: June 2026
+
+Status: Production Ready
+
+Refresh Frequency: Bi-Weekly

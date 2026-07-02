@@ -61,12 +61,15 @@ RUN_LOG_FILE = "data/logs/run_log.txt"
 RUN_HISTORY_FILE = "data/logs/Run_History.xlsx"
 
 # =========================================================
-# Output
+# Output Files
 # =========================================================
 
 OUTPUT_FOLDER = "output"
 
 OUTPUT_EXCEL_FILE = "output/Cisco_Partner_Master.xlsx"
+
+# JSON summary used by Power Apps and Copilot Studio
+REPORT_SUMMARY_FILE = "output/latest_report.json"
 
 # =========================================================
 # Cisco API Endpoints

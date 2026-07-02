@@ -13,18 +13,20 @@ Author:
 Taksh Jain
 
 Version:
-1.0.0
+1.1.0
 ===========================================================
 """
 
+import json
 import subprocess
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
+
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
-from pathlib import Path
 
 sys.path.append(
     str(Path(__file__).parent / "src")
@@ -33,7 +35,8 @@ sys.path.append(
 from config import (
     PROJECT_NAME,
     VERSION,
-    RUN_HISTORY_FILE
+    RUN_HISTORY_FILE,
+    REPORT_SUMMARY_FILE
 )
 
 from logger import log
@@ -150,6 +153,50 @@ def update_run_history(status, duration):
     wb.save(history_file)
 
 
+def update_report_summary(status, runtime_minutes):
+    """
+    Updates latest_report.json with
+    execution status and runtime.
+    """
+
+    summary_file = Path(
+        REPORT_SUMMARY_FILE
+    )
+
+    if not summary_file.exists():
+
+        return
+
+    with open(
+        summary_file,
+        "r",
+        encoding="utf-8"
+    ) as f:
+
+        summary = json.load(f)
+
+    summary["status"] = status
+
+    summary["runtime_minutes"] = round(
+        runtime_minutes,
+        2
+    )
+
+    with open(
+        summary_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            summary,
+            f,
+            indent=4
+        )
+
+    log(
+        "Report summary updated."
+    )
 def main():
 
     start = time.time()
@@ -194,6 +241,11 @@ def main():
                 total
             )
 
+            update_report_summary(
+                "FAILED",
+                total
+            )
+
             log("=" * 60)
             log(
                 "PROCESS FAILED",
@@ -212,6 +264,11 @@ def main():
     ) / 60
 
     update_run_history(
+        "SUCCESS",
+        total
+    )
+
+    update_report_summary(
         "SUCCESS",
         total
     )

@@ -1,10 +1,10 @@
-name: CISCO Partner Intelligence
+name: NetCom Partner Intelligence Automation
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-environment:
+  run-automation:
 
     runs-on: windows-latest
 
@@ -24,26 +24,46 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      -  name: Run Automation
-         run: python run_all.py
+      - name: Run Automation
+        run: python run_all.py
 
-      - name: Upload Excel Report
+      - name: Display Generated Files
+        shell: cmd
+        run: |
+          echo ============================
+          echo OUTPUT
+          echo ============================
+          dir output
+
+          echo.
+          echo ============================
+          echo DATA
+          echo ============================
+          dir data
+
+          echo.
+          echo ============================
+          echo LOGS
+          echo ============================
+          dir data\logs
+
+      - name: Upload Final Report
         uses: actions/upload-artifact@v4
         with:
           name: Cisco-Partner-Report-${{ github.run_number }}
-          path: output/Cisco_Partner_Master.xlsx
+          path: output/
           retention-days: 30
 
-      - name: Upload Logs
+      - name: Upload Runtime Logs
         uses: actions/upload-artifact@v4
         with:
-          name: Logs-${{ github.run_number }}
+          name: Runtime-Logs-${{ github.run_number }}
           path: data/logs/
-          retention-days: 30 
+          retention-days: 30
 
-      - name: Upload Run History
+      - name: Upload Partner Data
         uses: actions/upload-artifact@v4
         with:
-          name: Run-History-${{ github.run_number }}
-          path: data/run_history.csv
+          name: Partner-Data-${{ github.run_number }}
+          path: data/
           retention-days: 30

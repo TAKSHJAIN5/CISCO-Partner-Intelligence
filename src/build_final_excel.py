@@ -178,25 +178,30 @@ try:
 
     summary = {
 
-        "generated_at":
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+    "generated_at":
+        datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
 
-        "partners":
-            int(len(final_df)),
+    "status":
+        "SUCCESS",
 
-        "countries":
-            int(len(countries)),
+    "runtime_minutes":
+        0,
 
-        "cities":
-            int(len(cities)),
+    "partners":
+        int(len(final_df)),
 
-        "excel_file":
-            OUTPUT_EXCEL_FILE
+    "countries":
+        int(len(countries)),
 
-    }
+    "cities":
+        int(len(cities)),
 
+    "excel_file":
+        OUTPUT_EXCEL_FILE
+
+}
     with open(
         REPORT_SUMMARY_FILE,
         "w",

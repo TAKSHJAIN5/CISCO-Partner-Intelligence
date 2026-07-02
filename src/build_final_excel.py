@@ -9,19 +9,25 @@ Purpose:
 Builds the final Excel dataset by transforming the raw
 partner details into the business-required format.
 
+Also generates a JSON summary used by Power Apps.
+
 Author:
 Taksh Jain
 
 Version:
-1.0.0
+1.1.0
 ===========================================================
 """
+
+import json
+from datetime import datetime
 
 import pandas as pd
 
 from config import (
     PARTNER_DETAILS_FILE,
-    OUTPUT_EXCEL_FILE
+    OUTPUT_EXCEL_FILE,
+    REPORT_SUMMARY_FILE
 )
 
 from logger import log
@@ -141,12 +147,67 @@ try:
     )
 
     final_df.to_excel(
-
         OUTPUT_EXCEL_FILE,
-
         index=False
-
     )
+
+    # --------------------------------------------------
+    # Build report summary JSON
+    # --------------------------------------------------
+
+    locations = (
+        df["location"]
+        .fillna("")
+        .astype(str)
+    )
+
+    cities = set()
+    countries = set()
+
+    for location in locations:
+
+        parts = [
+            p.strip()
+            for p in location.split(",")
+        ]
+
+        if len(parts) >= 2:
+
+            cities.add(parts[0])
+            countries.add(parts[-1])
+
+    summary = {
+
+        "generated_at":
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+
+        "partners":
+            int(len(final_df)),
+
+        "countries":
+            int(len(countries)),
+
+        "cities":
+            int(len(cities)),
+
+        "excel_file":
+            OUTPUT_EXCEL_FILE
+
+    }
+
+    with open(
+        REPORT_SUMMARY_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            summary,
+            f,
+            indent=4
+        )
 
     log("=" * 60)
 
@@ -155,6 +216,8 @@ try:
     log(f"Rows Exported : {len(final_df)}")
 
     log(f"Output File : {OUTPUT_EXCEL_FILE}")
+
+    log(f"Summary JSON : {REPORT_SUMMARY_FILE}")
 
     log("=" * 60)
 

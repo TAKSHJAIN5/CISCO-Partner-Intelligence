@@ -1,4 +1,4 @@
-name: NetCom Partner Intelligence Automation
+name: CISCO Partner Intelligence Automation
 
 on:
   workflow_dispatch:

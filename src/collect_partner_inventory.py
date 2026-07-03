@@ -134,18 +134,31 @@ try:
 
         if not success:
 
-            log(
-                f"Unable to retrieve Page {page}. "
-                f"Stopping collection.",
-                "ERROR"
-            )
+    message = (
+        f"Unable to retrieve Page {page} "
+        f"after {MAX_RETRIES} attempts."
+    )
 
-            break
+    log(
+        message,
+        "ERROR"
+    )
+
+    raise RuntimeError(message)
 
         time.sleep(REQUEST_DELAY)
 
     df = pd.DataFrame(all_partners)
+    
+from pathlib import Path
 
+Path(
+    PARTNER_INVENTORY_FILE
+).parent.mkdir(
+    parents=True,
+    exist_ok=True
+)
+    
     df.to_csv(
         PARTNER_INVENTORY_FILE,
         index=False

@@ -39,6 +39,15 @@ from config import (
 )
 
 from logger import log
+Path(PARTNER_DETAILS_FILE).parent.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+Path(FAILED_PARTNERS_FILE).parent.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 
 try:
@@ -237,6 +246,21 @@ try:
     log(f"Failed File : {FAILED_PARTNERS_FILE}")
 
     log("=" * 60)
+
+# ==================================================
+# Sanity Check
+# ==================================================
+
+failure_rate = len(failed) / total
+
+if failure_rate > 0.02:
+
+    raise RuntimeError(
+
+        f"{len(failed)} partners "
+        f"({failure_rate:.1%}) could not be processed."
+
+    )
 
 except Exception as e:
 

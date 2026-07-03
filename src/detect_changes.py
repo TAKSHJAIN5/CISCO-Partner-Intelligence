@@ -206,6 +206,14 @@ try:
             "old_value",
             "new_value"
         ]
+        
+        Path(
+    CHANGE_LOG_FILE
+).parent.mkdir(
+    parents=True,
+    exist_ok=True
+)
+        
     )
 
     changes_df.to_csv(

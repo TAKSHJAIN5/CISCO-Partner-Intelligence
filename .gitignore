@@ -13,9 +13,15 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Generated Output
+# Generated Data
 data/*.csv
+data/logs/*.txt
+data/logs/*.csv
+data/logs/*.xlsx
+
+# Generated Output
 output/*.xlsx
+output/*.json
 
 # Logs
 *.log

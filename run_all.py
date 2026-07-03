@@ -167,13 +167,59 @@ def update_report_summary(status, runtime_minutes):
 
         return
 
-    with open(
-        summary_file,
-        "r",
-        encoding="utf-8"
-    ) as f:
+    def update_report_summary(status, runtime_minutes):
+    """
+    Updates latest_report.json with
+    execution status and runtime.
+    """
 
-        summary = json.load(f)
+    summary_file = Path(
+        REPORT_SUMMARY_FILE
+    )
+
+    if not summary_file.exists():
+
+        return
+
+    try:
+
+        with open(
+            summary_file,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            summary = json.load(f)
+
+        summary["status"] = status
+
+        summary["runtime_minutes"] = round(
+            runtime_minutes,
+            2
+        )
+
+        with open(
+            summary_file,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                summary,
+                f,
+                indent=4
+            )
+
+        log(
+            "Report summary updated."
+        )
+
+    except Exception as e:
+
+        log(
+            f"Could not update report summary: {e}",
+            "ERROR"
+        )
 
     summary["status"] = status
 
@@ -197,6 +243,7 @@ def update_report_summary(status, runtime_minutes):
     log(
         "Report summary updated."
     )
+
 def main():
 
     start = time.time()

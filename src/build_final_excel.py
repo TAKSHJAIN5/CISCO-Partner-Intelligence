@@ -135,16 +135,23 @@ try:
             "Yes" if preferred_cloud_ai else "No",
 
             "Competencies":
-            row["competencies"],
+"" if pd.isna(row["competencies"]) else row["competencies"],
 
             "Location":
-            row["location"]
+"" if pd.isna(row["location"]) else row["location"],
 
         })
 
     final_df = pd.DataFrame(
         final_rows
     )
+
+    from pathlib import Path
+
+Path(OUTPUT_EXCEL_FILE).parent.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
     final_df.to_excel(
         OUTPUT_EXCEL_FILE,
@@ -177,29 +184,14 @@ try:
             countries.add(parts[-1])
 
     summary = {
-
-    "generated_at":
-        datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-
-    "status":
-        "SUCCESS",
-
-    "runtime_minutes":
-        0,
-
-    "partners":
-        int(len(final_df)),
-
-    "countries":
-        int(len(countries)),
-
-    "cities":
-        int(len(cities)),
-
-    "excel_file":
-        OUTPUT_EXCEL_FILE
+    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "status": "SUCCESS",
+    "runtime_minutes": 0,
+    "partners": int(len(final_df)),
+    "countries": int(len(countries)),
+    "cities": int(len(cities)),
+    "excel_file": OUTPUT_EXCEL_FILE
+}
 
 }
     with open(

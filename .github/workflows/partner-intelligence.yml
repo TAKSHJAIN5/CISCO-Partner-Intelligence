@@ -3,9 +3,6 @@ name: CISCO Partner Intelligence Automation
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   run-automation:
 
@@ -15,8 +12,6 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -52,37 +47,16 @@ jobs:
           echo ============================
           dir data\logs
 
-      - name: Upload Final Report
+      - name: Upload Cisco Partner Output
         uses: actions/upload-artifact@v4
         with:
-          name: Cisco-Partner-Report-${{ github.run_number }}
+          name: Cisco-Partner-Output-${{ github.run_number }}
           path: output/
           retention-days: 30
 
-      - name: Upload Runtime Logs
+      - name: Upload Cisco Partner Logs
         uses: actions/upload-artifact@v4
         with:
-          name: Runtime-Logs-${{ github.run_number }}
+          name: Cisco-Partner-Logs-${{ github.run_number }}
           path: data/logs/
           retention-days: 30
-
-      - name: Upload Partner Data
-        uses: actions/upload-artifact@v4
-        with:
-          name: Partner-Data-${{ github.run_number }}
-          path: data/
-          retention-days: 30
-
-      - name: Commit Generated Files
-        shell: bash
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add output/
-          git add data/logs/
-          git add data/report_summary.json
-
-          git diff --cached --quiet || git commit -m "Auto-generated Cisco Partner report (Run #${{ github.run_number }})"
-
-          git push

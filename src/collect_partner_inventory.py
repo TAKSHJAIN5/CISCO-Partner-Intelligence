@@ -20,6 +20,7 @@ Version:
 
 import math
 import time
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -132,48 +133,31 @@ try:
 
                 time.sleep(RETRY_DELAY)
 
-            if not success:
+        if not success:
 
-               message = (
+            message = (
                 f"Unable to retrieve Page {page} "
                 f"after {MAX_RETRIES} attempts."
-               )
+            )
 
-               log(
+            log(
                 message,
                 "ERROR"
-               )
+            )
 
-               break
-
-            time.sleep(REQUEST_DELAY)
-
-               break
-
-            time.sleep(REQUEST_DELAY)
-
-               break
-
-            time.sleep(REQUEST_DELAY)
-               break
-
-            time.sleep(REQUEST_DELAY)
-
-    raise RuntimeError(message)
+            raise RuntimeError(message)
 
         time.sleep(REQUEST_DELAY)
 
     df = pd.DataFrame(all_partners)
-    
-from pathlib import Path
 
-Path(
-    PARTNER_INVENTORY_FILE
-).parent.mkdir(
-    parents=True,
-    exist_ok=True
-)
-    
+    Path(
+        PARTNER_INVENTORY_FILE
+    ).parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
     df.to_csv(
         PARTNER_INVENTORY_FILE,
         index=False

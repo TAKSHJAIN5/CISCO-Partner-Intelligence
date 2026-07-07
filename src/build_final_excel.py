@@ -21,6 +21,7 @@ Version:
 
 import json
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -146,12 +147,10 @@ try:
         final_rows
     )
 
-    from pathlib import Path
-
-Path(OUTPUT_EXCEL_FILE).parent.mkdir(
-    parents=True,
-    exist_ok=True
-)
+    Path(OUTPUT_EXCEL_FILE).parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
     final_df.to_excel(
         OUTPUT_EXCEL_FILE,
@@ -184,16 +183,15 @@ Path(OUTPUT_EXCEL_FILE).parent.mkdir(
             countries.add(parts[-1])
 
     summary = {
-    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "status": "SUCCESS",
-    "runtime_minutes": 0,
-    "partners": int(len(final_df)),
-    "countries": int(len(countries)),
-    "cities": int(len(cities)),
-    "excel_file": OUTPUT_EXCEL_FILE
-}
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "SUCCESS",
+        "runtime_minutes": 0,
+        "partners": int(len(final_df)),
+        "countries": int(len(countries)),
+        "cities": int(len(cities)),
+        "excel_file": OUTPUT_EXCEL_FILE
+    }
 
-}
     with open(
         REPORT_SUMMARY_FILE,
         "w",

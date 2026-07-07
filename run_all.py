@@ -167,20 +167,6 @@ def update_report_summary(status, runtime_minutes):
 
         return
 
-    def update_report_summary(status, runtime_minutes):
-    """
-    Updates latest_report.json with
-    execution status and runtime.
-    """
-
-    summary_file = Path(
-        REPORT_SUMMARY_FILE
-    )
-
-    if not summary_file.exists():
-
-        return
-
     try:
 
         with open(

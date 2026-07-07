@@ -221,29 +221,6 @@ def update_report_summary(status, runtime_minutes):
             "ERROR"
         )
 
-    summary["status"] = status
-
-    summary["runtime_minutes"] = round(
-        runtime_minutes,
-        2
-    )
-
-    with open(
-        summary_file,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            summary,
-            f,
-            indent=4
-        )
-
-    log(
-        "Report summary updated."
-    )
-
 def main():
 
     start = time.time()

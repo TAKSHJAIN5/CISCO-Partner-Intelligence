@@ -132,7 +132,7 @@ try:
 
                 time.sleep(RETRY_DELAY)
 
-                if not success:
+            if not success:
 
             message = (
                 f"Unable to retrieve Page {page} "
@@ -144,6 +144,17 @@ try:
                 "ERROR"
             )
 
+            break
+
+        time.sleep(REQUEST_DELAY)
+
+            break
+
+        time.sleep(REQUEST_DELAY)
+
+            break
+
+        time.sleep(REQUEST_DELAY)
             break
 
         time.sleep(REQUEST_DELAY)

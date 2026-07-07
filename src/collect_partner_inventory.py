@@ -134,30 +134,30 @@ try:
 
             if not success:
 
-            message = (
+               message = (
                 f"Unable to retrieve Page {page} "
                 f"after {MAX_RETRIES} attempts."
-            )
+               )
 
-            log(
+               log(
                 message,
                 "ERROR"
-            )
+               )
 
-            break
+               break
 
-        time.sleep(REQUEST_DELAY)
+            time.sleep(REQUEST_DELAY)
 
-            break
+               break
 
-        time.sleep(REQUEST_DELAY)
+            time.sleep(REQUEST_DELAY)
 
-            break
+               break
 
-        time.sleep(REQUEST_DELAY)
-            break
+            time.sleep(REQUEST_DELAY)
+               break
 
-        time.sleep(REQUEST_DELAY)
+            time.sleep(REQUEST_DELAY)
 
     raise RuntimeError(message)
 

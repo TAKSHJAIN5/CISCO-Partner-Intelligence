@@ -197,6 +197,13 @@ try:
     # Save Change Log
     # =====================================================
 
+    Path(
+        CHANGE_LOG_FILE
+    ).parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
     changes_df = pd.DataFrame(
         changes,
         columns=[
@@ -206,14 +213,6 @@ try:
             "old_value",
             "new_value"
         ]
-        
-        Path(
-    CHANGE_LOG_FILE
-).parent.mkdir(
-    parents=True,
-    exist_ok=True
-)
-        
     )
 
     changes_df.to_csv(

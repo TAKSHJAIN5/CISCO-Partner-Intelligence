@@ -344,6 +344,42 @@ REMOVED_PARTNER_OLD_VALUE = "Present"
 REMOVED_PARTNER_NEW_VALUE = "Removed"
 
 # =========================================================
+# Partner Classification Rules
+# =========================================================
+# Business rules used to classify partner portfolios in the
+# final workbook. A portfolio containing PREFERRED_KEYWORD is
+# treated as a preferred portfolio.
+
+PREFERRED_KEYWORD = "Preferred"
+
+PREFERRED_NETWORKING_PORTFOLIO = "Preferred Networking Partner"
+
+PREFERRED_SECURITY_PORTFOLIO = "Preferred Security Partner"
+
+PREFERRED_CLOUD_AI_PORTFOLIO = (
+    "Preferred Cloud and AI Infrastructure Partner"
+)
+
+# =========================================================
+# Partners Sheet Schema
+# =========================================================
+# Column order for the business-friendly Partners sheet in the
+# final Excel workbook.
+
+PARTNERS_SHEET_COLUMNS = [
+    "Name",
+    "Preferred Portfolios",
+    "Non Preferred Portfolios",
+    "Preferred Networking",
+    "Preferred Security",
+    "Preferred Cloud + AI",
+    "Sec Net Spez",
+    "Sec AI Infra Spez",
+    "Competencies",
+    "Location",
+]
+
+# =========================================================
 # Qualification Categories
 # =========================================================
 # Categories exposed by getPartnerOverview. Any category

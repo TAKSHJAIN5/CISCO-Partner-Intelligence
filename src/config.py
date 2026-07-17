@@ -107,6 +107,10 @@ OUTPUT_EXCEL_FILE = (
     f"{OUTPUT_FOLDER}/Cisco_Partner_Intelligence_Report.xlsx"
 )
 
+REPORT_SUMMARY_FILE = (
+    f"{OUTPUT_FOLDER}/report_summary.json"
+)
+
 # =========================================================
 # Excel Sheet Names
 # =========================================================

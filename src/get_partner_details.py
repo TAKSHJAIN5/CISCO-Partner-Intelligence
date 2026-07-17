@@ -1,383 +1,514 @@
 """
 ===========================================================
 Cisco Partner Intelligence Automation Platform
-===========================================================
 
-Version : 1.0.0
+Script:
+get_partner_details.py
 
-Author  : Taksh Jain
-Company : NetCom Learning
+Purpose:
+Master data-collection layer. Retrieves detailed overview
+information for every Cisco partner listed in the inventory
+and writes a clean, well-typed dataset that every downstream
+stage (change detection, Excel build, executive email) relies
+on.
 
-Description:
-Central configuration file for the Cisco Partner
-Intelligence Automation Platform.
+Runs unattended on a bi-weekly schedule via GitHub Actions.
 
-This file contains every configurable setting used
-throughout the project.
+Author:
+Taksh Jain
 
-All scripts should import values from here instead
-of using hardcoded constants.
-
+Version:
+1.0.0
 ===========================================================
 """
 
-# =========================================================
-# Project Information
-# =========================================================
+import shutil
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
-PROJECT_NAME = "Cisco Partner Intelligence Automation Platform"
+import pandas as pd
+import requests
 
-VERSION = "2.1.0"
-
-AUTHOR = "Taksh Jain"
-
-COMPANY = "NetCom Learning"
-
-RELEASE_DATE = "July 2026"
-
-STATUS = "Production"
-
-REFRESH_FREQUENCY = "Bi-Weekly"
-
-RUN_BY = "GitHub Actions"
-
-TIMEZONE = "Asia/Kolkata"
-
-# =========================================================
-# Report Information
-# =========================================================
-
-REPORT_TITLE = "Cisco Partner Intelligence Report"
-
-REPORT_SUBTITLE = (
-    "Automated Cisco Partner Intelligence & Change Report"
+from config import (
+    CATEGORY_COMPETENCY,
+    CATEGORY_PORTFOLIO,
+    CHECKPOINT_INTERVAL,
+    CSV_INDEX,
+    FAILED_COLUMNS,
+    FAILED_PARTNERS_FILE,
+    FAILURE_THRESHOLD,
+    FILE_ENCODING,
+    HTTPS_PREFIX,
+    LANGUAGE,
+    LOCATION_SEPARATOR,
+    MAX_RETRIES,
+    OUTPUT_COLUMNS,
+    PARTNER_DETAILS_FILE,
+    PARTNER_DETAILS_PREVIOUS_FILE,
+    PARTNER_INVENTORY_FILE,
+    PARTNER_OVERVIEW_API,
+    PROJECT_NAME,
+    QUALIFICATION_SEPARATOR,
+    REQUEST_DELAY,
+    REQUEST_HEADERS,
+    REQUEST_TIMEOUT,
+    REQUIRED_INVENTORY_COLUMNS,
+    RETRY_DELAY,
+    SAVE_BACKUP,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+    SUMMARY_BORDER,
+    TIMESTAMP_FORMAT,
+    VALID_URL_SCHEMES,
+    VERSION,
 )
+from logger import log
+
+
+class PartnerDetailError(Exception):
+    """Raised when a partner's details cannot be retrieved or parsed."""
+
 
 # =========================================================
-# Folder Paths
+# Value Helpers
 # =========================================================
 
-DATA_FOLDER = "data"
+def _clean(value: Any) -> str:
+    """Return a trimmed string, treating ``None`` and NaN as empty."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        # ``pd.isna`` raises on unhashable / array-like values; those
+        # are never empty, so fall through to string conversion.
+        pass
+    return str(value).strip()
 
-LOG_FOLDER = f"{DATA_FOLDER}/logs"
 
-OUTPUT_FOLDER = "output"
+def _normalize_website(value: Any) -> str:
+    """Trim a website value and ensure it carries a usable scheme.
 
-# =========================================================
-# Data Files
-# =========================================================
+    A non-empty address without a recognized scheme is prefixed with
+    ``https://``. Any value that already begins with a known scheme is
+    returned untouched.
+    """
+    website = _clean(value)
+    if not website:
+        return ""
+    if website.lower().startswith(VALID_URL_SCHEMES):
+        return website
+    return f"{HTTPS_PREFIX}{website}"
 
-PARTNER_INVENTORY_FILE = (
-    f"{DATA_FOLDER}/partner_inventory.csv"
-)
 
-PARTNER_DETAILS_FILE = (
-    f"{DATA_FOLDER}/partner_details.csv"
-)
+def _build_location(city: str, country: str) -> str:
+    """Compose a ``City, Country`` label, skipping missing parts."""
+    parts = [part for part in (city, country) if part]
+    return LOCATION_SEPARATOR.join(parts)
 
-PARTNER_DETAILS_PREVIOUS_FILE = (
-    f"{DATA_FOLDER}/partner_details_previous.csv"
-)
 
-# =========================================================
-# Log Files
-# =========================================================
+def _extract_qualifications(qualifications: Any) -> Tuple[str, str]:
+    """Split partner qualifications into portfolios and competencies.
 
-FAILED_PARTNERS_FILE = (
-    f"{LOG_FOLDER}/failed_partners.csv"
-)
+    Values are de-duplicated, sorted alphabetically (case-insensitive)
+    and joined with the qualification separator. Unknown categories are
+    ignored so new Cisco categories never break collection.
+    """
+    portfolios: set = set()
+    competencies: set = set()
 
-CHANGE_LOG_FILE = (
-    f"{LOG_FOLDER}/changes_log.csv"
-)
+    if not isinstance(qualifications, list):
+        return "", ""
 
-RUN_LOG_FILE = (
-    f"{LOG_FOLDER}/run_log.txt"
-)
+    for item in qualifications:
+        if not isinstance(item, dict):
+            continue
+        category = _clean(item.get("category_display_name")).upper()
+        name = _clean(item.get("keyword_display_name"))
+        if not name:
+            continue
+        if category == CATEGORY_PORTFOLIO:
+            portfolios.add(name)
+        elif category == CATEGORY_COMPETENCY:
+            competencies.add(name)
 
-RUN_HISTORY_FILE = (
-    f"{LOG_FOLDER}/Run_History.xlsx"
-)
+    portfolio_value = QUALIFICATION_SEPARATOR.join(
+        sorted(portfolios, key=str.casefold)
+    )
+    competency_value = QUALIFICATION_SEPARATOR.join(
+        sorted(competencies, key=str.casefold)
+    )
+    return portfolio_value, competency_value
 
-# =========================================================
-# Output Files
-# =========================================================
 
-OUTPUT_EXCEL_FILE = (
-    f"{OUTPUT_FOLDER}/Cisco_Partner_Intelligence_Report.xlsx"
-)
+def _format_duration(seconds: float) -> str:
+    """Render a duration in seconds as a compact ``h m s`` string."""
+    total_seconds = int(round(seconds))
+    hours, remainder = divmod(total_seconds, SECONDS_PER_HOUR)
+    minutes, secs = divmod(remainder, SECONDS_PER_MINUTE)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
 
-# =========================================================
-# Excel Sheet Names
-# =========================================================
-
-SUMMARY_SHEET = "Executive Summary"
-
-PARTNERS_SHEET = "Partners"
-
-CHANGES_SHEET = "Changes"
-
-LOGS_SHEET = "Logs"
-
-# =========================================================
-# Hyperlink Labels
-# =========================================================
-
-WEBSITE_LINK_TEXT = "🌐 Website"
-
-CISCO_LINK_TEXT = "🔗 Cisco Profile"
-
-# =========================================================
-# Report Colors
-# =========================================================
-
-COLOR_HEADER = "1F4E78"
-
-COLOR_TITLE = "D9EAD3"
-
-COLOR_NEW = "C6EFCE"
-
-COLOR_UPDATED = "FFEB9C"
-
-COLOR_REMOVED = "FFC7CE"
 
 # =========================================================
-# Email Configuration
+# Filesystem & Inventory
 # =========================================================
 
-EMAIL_ENABLED = True
+def ensure_directories() -> None:
+    """Create the parent directories for every output artifact."""
+    for file_path in (
+        PARTNER_DETAILS_FILE,
+        PARTNER_DETAILS_PREVIOUS_FILE,
+        FAILED_PARTNERS_FILE,
+    ):
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
 
-EMAIL_SUBJECT_PREFIX = (
-    "Cisco Partner Intelligence Report"
-)
 
-EMAIL_RECIPIENTS = [
-    # Example:
-    # "sunil@company.com",
-]
+def backup_previous_file() -> None:
+    """Copy the current details file aside before it is overwritten."""
+    if not SAVE_BACKUP:
+        log("Backup disabled in configuration. Skipping backup.")
+        return
 
-# =========================================================
-# Cisco API Endpoints
-# =========================================================
+    current = Path(PARTNER_DETAILS_FILE)
+    previous = Path(PARTNER_DETAILS_PREVIOUS_FILE)
 
-BASE_API = (
-    "https://locatr.cloudapps.cisco.com/"
-    "WWChannels/LOCATR/service/api/v1"
-)
+    if not current.exists():
+        log(
+            "No previous partner_details.csv found. Skipping backup.",
+            "WARNING",
+        )
+        return
 
-PARTNER_SEARCH_API = (
-    f"{BASE_API}/getPfPartners"
-)
+    shutil.copy2(current, previous)
+    log(f"Previous partner_details.csv backed up to {previous}")
 
-PARTNER_OVERVIEW_API = (
-    f"{BASE_API}/getPartnerOverview"
-)
 
-# =========================================================
-# Cisco Search Filters
-# =========================================================
+def load_inventory() -> pd.DataFrame:
+    """Load the partner inventory and validate its required columns."""
+    inventory_path = Path(PARTNER_INVENTORY_FILE)
+    if not inventory_path.exists():
+        raise FileNotFoundError(
+            f"Partner inventory not found: {inventory_path}"
+        )
 
-PORTFOLIO_IDS = (
-    "^137061562^,^137061563^,^137061564^,^137061565^,"
-    "^137061566^,^137061567^,^137061568^,^137061569^,"
-    "^137061570^,^137061571^,^137061572^,^137061573^"
-)
+    inventory = pd.read_csv(inventory_path)
 
-COMPETENCY_IDS = (
-    "^137061583^,^137061577^,^137061578^,^137063260^,"
-    "^137061579^,^137064818^,^137061585^,^137061582^,"
-    "^137061586^,^137061581^,^137061580^,^137061778^"
-)
+    missing = [
+        column
+        for column in REQUIRED_INVENTORY_COLUMNS
+        if column not in inventory.columns
+    ]
+    if missing:
+        raise ValueError(
+            "Inventory file is missing required columns: "
+            f"{', '.join(missing)}"
+        )
 
-# =========================================================
-# API Configuration
-# =========================================================
+    log(f"Inventory loaded: {len(inventory)} partners from {inventory_path}")
+    return inventory
 
-LANGUAGE = "EN"
-
-PAGE_SIZE = 12
-
-REQUEST_TIMEOUT = 30
-
-MAX_RETRIES = 3
-
-RETRY_DELAY = 5
-
-REQUEST_DELAY = 0.5
-
-CHECKPOINT_INTERVAL = 50
-
-USER_AGENT = (
-    f"{PROJECT_NAME}/{VERSION}"
-)
-
-RANDOM_SEED = "123456789"
 
 # =========================================================
-# Date & Time Formats
+# HTTP Session & Requests
 # =========================================================
 
-DATE_FORMAT = "%Y-%m-%d"
+def create_session() -> requests.Session:
+    """Build a reusable session with the standard request headers."""
+    session = requests.Session()
+    session.headers.update(REQUEST_HEADERS)
+    return session
 
-TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# =========================================================
-# Application Settings
-# =========================================================
+def build_payload(row: pd.Series) -> Dict[str, str]:
+    """Build the getPartnerOverview request body for one partner."""
+    return {
+        "BE_GEO_ID": _clean(row.get("be_geo_id")),
+        "LOCATION_IDS": _clean(row.get("location_id")),
+        "LANGUAGE_CD": LANGUAGE,
+    }
 
-SAVE_BACKUP = True
 
-ENABLE_CHANGE_LOG = True
+def _parse_overview_response(data: Any) -> Dict[str, Any]:
+    """Validate an API payload and return the first partner record.
 
-ENABLE_RUN_LOG = True
+    Raises:
+        PartnerDetailError: If the payload is malformed, reports failure,
+            or contains no partner records.
+    """
+    if not isinstance(data, dict):
+        raise PartnerDetailError(
+            "Unexpected API response: expected a JSON object."
+        )
+    if not data.get("success"):
+        raise PartnerDetailError("API response did not report success.")
 
-# =========================================================
-# Excel Configuration
-# =========================================================
+    records = data.get("data")
+    if not isinstance(records, list) or not records:
+        raise PartnerDetailError(
+            "API response did not contain any partner records."
+        )
 
-FREEZE_HEADER_ROW = True
+    partner = records[0]
+    if not isinstance(partner, dict):
+        raise PartnerDetailError("API partner record is malformed.")
 
-FREEZE_NAME_COLUMN = True
+    return partner
 
-AUTO_FILTER = True
 
-AUTO_FIT_COLUMNS = True
+def fetch_partner_details(
+    session: requests.Session,
+    payload: Dict[str, str],
+    partner_name: str,
+) -> Dict[str, Any]:
+    """Fetch and validate one partner's overview, with retries.
 
-# =========================================================
-# Dataset Schemas
-# =========================================================
-# Shared column contracts consumed across the pipeline.
-# These are the single source of truth for CSV structure;
-# do not redefine them inside individual scripts and do not
-# reorder them without updating every downstream stage.
+    Retries up to ``MAX_RETRIES`` times, waiting ``RETRY_DELAY`` seconds
+    between attempts. Every attempt is logged. After the final attempt a
+    :class:`PartnerDetailError` is raised carrying the last error.
+    """
+    last_error: Exception | None = None
 
-# Inventory schema produced by collect_partner_inventory.py.
-INVENTORY_COLUMNS = [
-    "partner_name",
-    "be_geo_id",
-    "location_id",
-    "partner_id",
-]
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = session.post(
+                PARTNER_OVERVIEW_API,
+                json=payload,
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            return _parse_overview_response(response.json())
+        except Exception as exc:  # noqa: BLE001 - retried, then re-raised
+            last_error = exc
+            log(
+                f"{partner_name} - attempt {attempt}/{MAX_RETRIES} "
+                f"failed: {exc}",
+                "WARNING",
+            )
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY)
 
-# Detail schema produced by get_partner_details.py.
-OUTPUT_COLUMNS = [
-    "partner_name",
-    "site_id",
-    "be_geo_id",
-    "partner_since",
-    "website",
-    "phone",
-    "address_line_1",
-    "address_line_2",
-    "address_line_3",
-    "city",
-    "state",
-    "country",
-    "zip_code",
-    "coordinates",
-    "description",
-    "location",
-    "portfolios",
-    "competencies",
-]
+    raise PartnerDetailError(
+        f"Failed to fetch details for '{partner_name}' after "
+        f"{MAX_RETRIES} attempts: {last_error}"
+    ) from last_error
 
-# Audit schema for partners that could not be collected.
-FAILED_COLUMNS = [
-    "partner_name",
-    "site_id",
-    "be_geo_id",
-    "location_id",
-    "attempts",
-    "error_message",
-    "timestamp",
-]
-
-# Inventory columns that must be present for detail collection.
-REQUIRED_INVENTORY_COLUMNS = (
-    "partner_name",
-    "be_geo_id",
-    "location_id",
-)
-
-# =========================================================
-# Qualification Categories
-# =========================================================
-# Categories exposed by getPartnerOverview. Any category
-# outside this set is ignored rather than treated as an error.
-
-CATEGORY_PORTFOLIO = "PORTFOLIO"
-
-CATEGORY_COMPETENCY = "COMPETENCY"
 
 # =========================================================
-# Data Quality
+# Data Extraction
 # =========================================================
 
-# URL schemes that indicate a website value is already
-# addressable and must be left untouched.
-VALID_URL_SCHEMES = (
-    "http://",
-    "https://",
-    "mailto:",
-    "tel:",
-    "javascript:",
-)
+def extract_partner_data(
+    partner: Dict[str, Any],
+    inventory_row: pd.Series,
+) -> Dict[str, Any]:
+    """Map a raw partner overview record onto the output schema.
 
-# Scheme prepended to bare website values.
-HTTPS_PREFIX = "https://"
+    Identity fields (partner_name, site_id, be_geo_id) fall back to the
+    inventory values whenever the API omits them, so known identifiers
+    are never left blank.
+    """
+    city = _clean(partner.get("site_city"))
+    country = _clean(partner.get("site_country"))
+    portfolios, competencies = _extract_qualifications(
+        partner.get("qualifications", [])
+    )
 
-# Separator used to serialize portfolio and competency lists.
-# The surrounding spaces intentionally match the format already
-# stored in partner_details.csv so change detection stays stable.
-QUALIFICATION_SEPARATOR = " | "
+    return {
+        "partner_name": (
+            _clean(partner.get("partner_name"))
+            or _clean(inventory_row.get("partner_name"))
+        ),
+        "site_id": (
+            _clean(partner.get("site_id"))
+            or _clean(inventory_row.get("site_id"))
+        ),
+        "be_geo_id": (
+            _clean(partner.get("be_geo_id"))
+            or _clean(inventory_row.get("be_geo_id"))
+        ),
+        "partner_since": _clean(partner.get("partner_since")),
+        "website": _normalize_website(partner.get("web_addr")),
+        "phone": _clean(partner.get("site_phone")),
+        "address_line_1": _clean(partner.get("site_addr_1")),
+        "address_line_2": _clean(partner.get("site_addr_2")),
+        "address_line_3": _clean(partner.get("site_addr_3")),
+        "city": city,
+        "state": _clean(partner.get("site_state")),
+        "country": country,
+        "zip_code": _clean(partner.get("site_zip")),
+        "coordinates": _clean(partner.get("loc_coordinates")),
+        "description": _clean(partner.get("note_text")),
+        "location": _build_location(city, country),
+        "portfolios": portfolios,
+        "competencies": competencies,
+    }
 
-# Separator used to compose "City, Country" location labels.
-LOCATION_SEPARATOR = ", "
+
+def _build_failure_record(
+    inventory_row: pd.Series,
+    partner_name: str,
+    error: Exception,
+) -> Dict[str, Any]:
+    """Build one row of the failed-partners audit log."""
+    return {
+        "partner_name": partner_name,
+        "site_id": _clean(inventory_row.get("site_id")),
+        "be_geo_id": _clean(inventory_row.get("be_geo_id")),
+        "location_id": _clean(inventory_row.get("location_id")),
+        "attempts": MAX_RETRIES,
+        "error_message": str(error),
+        "timestamp": datetime.now().strftime(TIMESTAMP_FORMAT),
+    }
+
 
 # =========================================================
-# Run Thresholds
+# Persistence
 # =========================================================
 
-# Maximum tolerated fraction of failed partners before a run
-# is treated as unsuccessful.
-FAILURE_THRESHOLD = 0.02
+def save_checkpoint(
+    results: List[Dict[str, Any]],
+    failed: List[Dict[str, Any]],
+) -> None:
+    """Persist collected and failed partners to disk.
+
+    Both frames are written with an explicit column schema so the files
+    are stable even when the in-memory records are empty or partial.
+    """
+    pd.DataFrame(results, columns=OUTPUT_COLUMNS).to_csv(
+        PARTNER_DETAILS_FILE,
+        index=CSV_INDEX,
+        encoding=FILE_ENCODING,
+    )
+    pd.DataFrame(failed, columns=FAILED_COLUMNS).to_csv(
+        FAILED_PARTNERS_FILE,
+        index=CSV_INDEX,
+        encoding=FILE_ENCODING,
+    )
+
 
 # =========================================================
-# Reporting & Time
+# Reporting
 # =========================================================
 
-# Banner rule used for startup and summary log blocks.
-SUMMARY_BORDER = "=" * 60
+def print_summary(
+    total: int,
+    results: List[Dict[str, Any]],
+    failed: List[Dict[str, Any]],
+    duration: float,
+) -> None:
+    """Log the final run summary block."""
+    successful = len(results)
+    failure_count = len(failed)
+    failure_rate = (failure_count / total) if total else 0.0
+    minutes = duration / SECONDS_PER_MINUTE
+    partners_per_minute = (total / minutes) if minutes > 0 else 0.0
 
-# Time conversion helpers for human-readable durations.
-SECONDS_PER_MINUTE = 60
+    log(SUMMARY_BORDER)
+    log("Partner Detail Collection Complete")
+    log(f"Total Partners      : {total}")
+    log(f"Successful          : {successful}")
+    log(f"Failed              : {failure_count}")
+    log(f"Failure Rate        : {failure_rate:.1%}")
+    log(f"Duration            : {_format_duration(duration)}")
+    log(f"Partners Per Minute : {partners_per_minute:.1f}")
+    log(f"Output File         : {PARTNER_DETAILS_FILE}")
+    log(f"Failed File         : {FAILED_PARTNERS_FILE}")
+    log(SUMMARY_BORDER)
 
-SECONDS_PER_HOUR = 3600
+
+def _enforce_failure_threshold(
+    total: int,
+    failed: List[Dict[str, Any]],
+) -> None:
+    """Raise if the failure rate exceeds the configured threshold."""
+    if total == 0:
+        return
+    failure_rate = len(failed) / total
+    if failure_rate > FAILURE_THRESHOLD:
+        raise RuntimeError(
+            f"{len(failed)} partners ({failure_rate:.1%}) could not be "
+            f"processed, exceeding the {FAILURE_THRESHOLD:.0%} threshold."
+        )
+
 
 # =========================================================
-# HTTP Request Headers
+# Orchestration
 # =========================================================
 
-ACCEPT_JSON = "application/json"
+def main() -> None:
+    """Collect details for every inventory partner and persist results."""
+    start_time = time.perf_counter()
+    start_timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
 
-CONTENT_TYPE_JSON = "application/json"
+    log(SUMMARY_BORDER)
+    log(PROJECT_NAME)
+    log(f"Version              : {VERSION}")
+    log(f"Start Time           : {start_timestamp}")
+    log(f"Inventory File       : {PARTNER_INVENTORY_FILE}")
+    log(f"Partner Details File : {PARTNER_DETAILS_FILE}")
+    log(SUMMARY_BORDER)
 
-CONNECTION_KEEP_ALIVE = "keep-alive"
+    ensure_directories()
+    backup_previous_file()
+    inventory = load_inventory()
 
-# Shared header set applied to every requests.Session.
-REQUEST_HEADERS = {
-    "User-Agent": USER_AGENT,
-    "Accept": ACCEPT_JSON,
-    "Content-Type": CONTENT_TYPE_JSON,
-    "Connection": CONNECTION_KEEP_ALIVE,
-}
+    total = len(inventory)
+    if total == 0:
+        log("Inventory is empty. Nothing to process.", "WARNING")
+        save_checkpoint([], [])
+        return
 
-# =========================================================
-# File Defaults
-# =========================================================
+    log(f"Total partners to process: {total}")
 
-# Default text encoding for CSV, logs and other text files.
-FILE_ENCODING = "utf-8"
+    results: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
 
-# Default DataFrame index behavior when writing CSV files.
-CSV_INDEX = False
+    with create_session() as session:
+        for position, (_, row) in enumerate(inventory.iterrows(), start=1):
+            partner_name = _clean(row.get("partner_name")) or "Unknown Partner"
+            log(f"[{position}/{total}] {partner_name}")
+
+            payload = build_payload(row)
+
+            try:
+                partner = fetch_partner_details(session, payload, partner_name)
+                results.append(extract_partner_data(partner, row))
+            except Exception as exc:  # noqa: BLE001 - recorded, run continues
+                failed.append(_build_failure_record(row, partner_name, exc))
+                log(
+                    f"{partner_name} - permanently failed after "
+                    f"{MAX_RETRIES} attempts.",
+                    "ERROR",
+                )
+
+            if position % CHECKPOINT_INTERVAL == 0:
+                save_checkpoint(results, failed)
+                log(
+                    f"Checkpoint saved ({position}/{total}) - "
+                    f"{len(results)} ok, {len(failed)} failed"
+                )
+
+            time.sleep(REQUEST_DELAY)
+
+    save_checkpoint(results, failed)
+
+    duration = time.perf_counter() - start_time
+    print_summary(total, results, failed, duration)
+
+    _enforce_failure_threshold(total, failed)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:  # noqa: BLE001 - logged before fatal re-raise
+        log("Fatal error during partner detail collection.", "ERROR")
+        log(str(exc), "ERROR")
+        raise

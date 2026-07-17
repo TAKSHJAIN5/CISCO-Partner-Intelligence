@@ -380,6 +380,51 @@ PARTNERS_SHEET_COLUMNS = [
 ]
 
 # =========================================================
+# Workbook Layout
+# =========================================================
+# Order in which worksheets appear in the final workbook, plus
+# the subtitle used on the metadata (Logs) sheet.
+
+WORKSHEET_ORDER = [
+    SUMMARY_SHEET,
+    PARTNERS_SHEET,
+    CHANGES_SHEET,
+    LOGS_SHEET,
+]
+
+LOGS_SUBTITLE = "Execution Metadata"
+
+# =========================================================
+# Excel Formatting
+# =========================================================
+# Reusable presentation settings for the final workbook. All
+# colors are 6-digit hex RGB strings.
+
+COLOR_HEADER_FONT = "FFFFFF"
+
+COLOR_ALTERNATE_ROW = "F7F9FC"
+
+COLOR_BORDER = "D9D9D9"
+
+HEADER_FONT_SIZE = 11
+
+TITLE_FONT_SIZE = 14
+
+SUBTITLE_FONT_SIZE = 11
+
+ENABLE_ALTERNATE_ROWS = True
+
+ENABLE_BORDERS = True
+
+SHOW_GRIDLINES = False
+
+MIN_COLUMN_WIDTH = 15
+
+MAX_COLUMN_WIDTH = 60
+
+COLUMN_WIDTH_PADDING = 3
+
+# =========================================================
 # Qualification Categories
 # =========================================================
 # Categories exposed by getPartnerOverview. Any category

@@ -12,8 +12,11 @@ Description:
 Central configuration file for the Cisco Partner
 Intelligence Automation Platform.
 
-All configurable values used across the project
-should be maintained here.
+This file contains every configurable setting used
+throughout the project.
+
+All scripts should import values from here instead
+of using hardcoded constants.
 
 ===========================================================
 """
@@ -24,65 +27,150 @@ should be maintained here.
 
 PROJECT_NAME = "Cisco Partner Intelligence Automation Platform"
 
-VERSION = "1.0.0"
+VERSION = "2.1.0"
 
 AUTHOR = "Taksh Jain"
 
 COMPANY = "NetCom Learning"
 
-RELEASE_DATE = "June 2026"
+RELEASE_DATE = "July 2026"
 
-STATUS = "Production Ready"
+STATUS = "Production"
 
 REFRESH_FREQUENCY = "Bi-Weekly"
+
+RUN_BY = "GitHub Actions"
+
+TIMEZONE = "Asia/Kolkata"
+
+# =========================================================
+# Report Information
+# =========================================================
+
+REPORT_TITLE = "Cisco Partner Intelligence Report"
+
+REPORT_SUBTITLE = (
+    "Automated Cisco Partner Intelligence & Change Report"
+)
+
+# =========================================================
+# Folder Paths
+# =========================================================
+
+DATA_FOLDER = "data"
+
+LOG_FOLDER = f"{DATA_FOLDER}/logs"
+
+OUTPUT_FOLDER = "output"
 
 # =========================================================
 # Data Files
 # =========================================================
 
-PARTNER_INVENTORY_FILE = "data/partner_inventory.csv"
+PARTNER_INVENTORY_FILE = (
+    f"{DATA_FOLDER}/partner_inventory.csv"
+)
 
-PARTNER_DETAILS_FILE = "data/partner_details.csv"
+PARTNER_DETAILS_FILE = (
+    f"{DATA_FOLDER}/partner_details.csv"
+)
 
-PARTNER_DETAILS_PREVIOUS_FILE = "data/partner_details_previous.csv"
+PARTNER_DETAILS_PREVIOUS_FILE = (
+    f"{DATA_FOLDER}/partner_details_previous.csv"
+)
 
 # =========================================================
 # Log Files
 # =========================================================
 
-LOG_FOLDER = "data/logs"
+FAILED_PARTNERS_FILE = (
+    f"{LOG_FOLDER}/failed_partners.csv"
+)
 
-FAILED_PARTNERS_FILE = "data/logs/failed_partners.csv"
+CHANGE_LOG_FILE = (
+    f"{LOG_FOLDER}/changes_log.csv"
+)
 
-CHANGE_LOG_FILE = "data/logs/changes_log.csv"
+RUN_LOG_FILE = (
+    f"{LOG_FOLDER}/run_log.txt"
+)
 
-RUN_LOG_FILE = "data/logs/run_log.txt"
-
-RUN_HISTORY_FILE = "data/logs/Run_History.xlsx"
+RUN_HISTORY_FILE = (
+    f"{LOG_FOLDER}/Run_History.xlsx"
+)
 
 # =========================================================
 # Output Files
 # =========================================================
 
-OUTPUT_FOLDER = "output"
+OUTPUT_EXCEL_FILE = (
+    f"{OUTPUT_FOLDER}/Cisco_Partner_Intelligence_Report.xlsx"
+)
 
-OUTPUT_EXCEL_FILE = "output/Cisco_Partner_Master.xlsx"
+# =========================================================
+# Excel Sheet Names
+# =========================================================
 
-# JSON summary used by Power Apps and Copilot Studio
-REPORT_SUMMARY_FILE = "output/latest_report.json"
+SUMMARY_SHEET = "Executive Summary"
+
+PARTNERS_SHEET = "Partners"
+
+CHANGES_SHEET = "Changes"
+
+LOGS_SHEET = "Logs"
+
+# =========================================================
+# Hyperlink Labels
+# =========================================================
+
+WEBSITE_LINK_TEXT = "🌐 Website"
+
+CISCO_LINK_TEXT = "🔗 Cisco Profile"
+
+# =========================================================
+# Report Colors
+# =========================================================
+
+COLOR_HEADER = "1F4E78"
+
+COLOR_TITLE = "D9EAD3"
+
+COLOR_NEW = "C6EFCE"
+
+COLOR_UPDATED = "FFEB9C"
+
+COLOR_REMOVED = "FFC7CE"
+
+# =========================================================
+# Email Configuration
+# =========================================================
+
+EMAIL_ENABLED = True
+
+EMAIL_SUBJECT_PREFIX = (
+    "Cisco Partner Intelligence Report"
+)
+
+EMAIL_RECIPIENTS = [
+    # Example:
+    # "sunil@company.com",
+]
 
 # =========================================================
 # Cisco API Endpoints
 # =========================================================
 
-PARTNER_SEARCH_API = (
+BASE_API = (
     "https://locatr.cloudapps.cisco.com/"
-    "WWChannels/LOCATR/service/api/v1/getPfPartners"
+    "WWChannels/LOCATR/service/api/v1"
+)
+
+PARTNER_SEARCH_API = (
+    f"{BASE_API}/getPfPartners"
 )
 
 PARTNER_OVERVIEW_API = (
-    "https://locatr.cloudapps.cisco.com/"
-    "WWChannels/LOCATR/service/api/v1/getPartnerOverview"
+    f"{BASE_API}/getPartnerOverview"
 )
 
 # =========================================================
@@ -117,7 +205,21 @@ RETRY_DELAY = 5
 
 REQUEST_DELAY = 0.5
 
+CHECKPOINT_INTERVAL = 50
+
+USER_AGENT = (
+    f"{PROJECT_NAME}/{VERSION}"
+)
+
 RANDOM_SEED = "123456789"
+
+# =========================================================
+# Date & Time Formats
+# =========================================================
+
+DATE_FORMAT = "%Y-%m-%d"
+
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # =========================================================
 # Application Settings
@@ -140,3 +242,142 @@ FREEZE_NAME_COLUMN = True
 AUTO_FILTER = True
 
 AUTO_FIT_COLUMNS = True
+
+# =========================================================
+# Dataset Schemas
+# =========================================================
+# Shared column contracts consumed across the pipeline.
+# These are the single source of truth for CSV structure;
+# do not redefine them inside individual scripts and do not
+# reorder them without updating every downstream stage.
+
+# Inventory schema produced by collect_partner_inventory.py.
+INVENTORY_COLUMNS = [
+    "partner_name",
+    "be_geo_id",
+    "location_id",
+    "partner_id",
+]
+
+# Detail schema produced by get_partner_details.py.
+OUTPUT_COLUMNS = [
+    "partner_name",
+    "site_id",
+    "be_geo_id",
+    "partner_since",
+    "website",
+    "phone",
+    "address_line_1",
+    "address_line_2",
+    "address_line_3",
+    "city",
+    "state",
+    "country",
+    "zip_code",
+    "coordinates",
+    "description",
+    "location",
+    "portfolios",
+    "competencies",
+]
+
+# Audit schema for partners that could not be collected.
+FAILED_COLUMNS = [
+    "partner_name",
+    "site_id",
+    "be_geo_id",
+    "location_id",
+    "attempts",
+    "error_message",
+    "timestamp",
+]
+
+# Inventory columns that must be present for detail collection.
+REQUIRED_INVENTORY_COLUMNS = (
+    "partner_name",
+    "be_geo_id",
+    "location_id",
+)
+
+# =========================================================
+# Qualification Categories
+# =========================================================
+# Categories exposed by getPartnerOverview. Any category
+# outside this set is ignored rather than treated as an error.
+
+CATEGORY_PORTFOLIO = "PORTFOLIO"
+
+CATEGORY_COMPETENCY = "COMPETENCY"
+
+# =========================================================
+# Data Quality
+# =========================================================
+
+# URL schemes that indicate a website value is already
+# addressable and must be left untouched.
+VALID_URL_SCHEMES = (
+    "http://",
+    "https://",
+    "mailto:",
+    "tel:",
+    "javascript:",
+)
+
+# Scheme prepended to bare website values.
+HTTPS_PREFIX = "https://"
+
+# Separator used to serialize portfolio and competency lists.
+# The surrounding spaces intentionally match the format already
+# stored in partner_details.csv so change detection stays stable.
+QUALIFICATION_SEPARATOR = " | "
+
+# Separator used to compose "City, Country" location labels.
+LOCATION_SEPARATOR = ", "
+
+# =========================================================
+# Run Thresholds
+# =========================================================
+
+# Maximum tolerated fraction of failed partners before a run
+# is treated as unsuccessful.
+FAILURE_THRESHOLD = 0.02
+
+# =========================================================
+# Reporting & Time
+# =========================================================
+
+# Banner rule used for startup and summary log blocks.
+SUMMARY_BORDER = "=" * 60
+
+# Time conversion helpers for human-readable durations.
+SECONDS_PER_MINUTE = 60
+
+SECONDS_PER_HOUR = 3600
+
+# =========================================================
+# HTTP Request Headers
+# =========================================================
+
+ACCEPT_JSON = "application/json"
+
+CONTENT_TYPE_JSON = "application/json"
+
+CONNECTION_KEEP_ALIVE = "keep-alive"
+
+# Shared header set applied to every requests.Session.
+REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": ACCEPT_JSON,
+    "Content-Type": CONTENT_TYPE_JSON,
+    "Connection": CONNECTION_KEEP_ALIVE,
+}
+
+# =========================================================
+# File Defaults
+# =========================================================
+
+# Default text encoding for CSV, logs and other text files.
+FILE_ENCODING = "utf-8"
+
+# Default DataFrame index behavior when writing CSV files.
+CSV_INDEX = False

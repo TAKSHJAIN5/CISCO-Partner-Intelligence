@@ -8,9 +8,11 @@ build_final_excel.py
 Purpose:
 Presentation layer. Transforms the collected partner details
 and detected changes into the final, management-ready Excel
-workbook that is delivered to marketing teams and leadership.
+workbook, applies all professional formatting, and saves the
+workbook in a single pass.
 
 The workbook is the only deliverable produced by this script.
+There is no separate formatting step and no post-processing.
 
 Runs unattended on a bi-weekly schedule via GitHub Actions.
 
@@ -29,7 +31,7 @@ from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -41,11 +43,21 @@ from config import (
     CHANGE_TYPE_NEW_PARTNER,
     CHANGE_TYPE_REMOVED_PARTNER,
     CHANGES_SHEET,
+    COLOR_ALTERNATE_ROW,
+    COLOR_BORDER,
     COLOR_HEADER,
+    COLOR_HEADER_FONT,
     COLOR_TITLE,
+    COLUMN_WIDTH_PADDING,
+    ENABLE_ALTERNATE_ROWS,
+    ENABLE_BORDERS,
     FREEZE_HEADER_ROW,
     FREEZE_NAME_COLUMN,
+    HEADER_FONT_SIZE,
     LOGS_SHEET,
+    LOGS_SUBTITLE,
+    MAX_COLUMN_WIDTH,
+    MIN_COLUMN_WIDTH,
     OUTPUT_EXCEL_FILE,
     PARTNER_DETAILS_FILE,
     PARTNERS_SHEET,
@@ -60,11 +72,15 @@ from config import (
     REPORT_TITLE,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
+    SHOW_GRIDLINES,
+    SUBTITLE_FONT_SIZE,
     SUMMARY_BORDER,
     SUMMARY_SHEET,
     TIMESTAMP_FORMAT,
+    TITLE_FONT_SIZE,
     TRACKED_CHANGE_FIELDS,
     VERSION,
+    WORKSHEET_ORDER,
 )
 from logger import log
 
@@ -85,30 +101,39 @@ REQUIRED_PARTNER_COLUMNS = [
     LOCATION_COLUMN,
 ]
 
-# Presentation labels.
+# Presentation labels for boolean partner attributes.
 YES_LABEL = "Yes"
 NO_LABEL = "No"
-LOGS_SUBTITLE = "Execution Metadata"
-HEADER_FONT_COLOR = "FFFFFF"
 
-# Column auto-fit bounds (in Excel character units).
-MIN_COLUMN_WIDTH = 12
-MAX_COLUMN_WIDTH = 60
-COLUMN_WIDTH_PADDING = 2
+# Worksheet layout kinds, used to select the correct formatting.
+SHEET_KIND_TABLE = "table"
+SHEET_KIND_KEY_VALUE = "key_value"
 
-# Reusable cell styles.
-_HEADER_FILL = PatternFill(
-    start_color=COLOR_HEADER, end_color=COLOR_HEADER, fill_type="solid"
+# Key/value sheet layout: title, subtitle, blank spacer, then data.
+KEY_VALUE_TITLE_ROW = 1
+KEY_VALUE_SUBTITLE_ROW = 2
+KEY_VALUE_DATA_START_ROW = 4
+KEY_VALUE_COLUMN_COUNT = 2
+
+# Table sheet layout: header row 1, data from row 2.
+TABLE_HEADER_ROW = 1
+TABLE_DATA_START_ROW = 2
+
+# Reusable cell styles derived from configuration.
+_THIN_SIDE = Side(style="thin", color=COLOR_BORDER)
+_THIN_BORDER = Border(
+    left=_THIN_SIDE, right=_THIN_SIDE, top=_THIN_SIDE, bottom=_THIN_SIDE
 )
-_HEADER_FONT = Font(bold=True, color=HEADER_FONT_COLOR)
-_TITLE_FILL = PatternFill(
-    start_color=COLOR_TITLE, end_color=COLOR_TITLE, fill_type="solid"
-)
-_TITLE_FONT = Font(bold=True, size=14)
-_SUBTITLE_FONT = Font(italic=True, size=11)
+_HEADER_FILL = PatternFill(fill_type="solid", fgColor=COLOR_HEADER)
+_HEADER_FONT = Font(color=COLOR_HEADER_FONT, bold=True, size=HEADER_FONT_SIZE)
+_TITLE_FILL = PatternFill(fill_type="solid", fgColor=COLOR_TITLE)
+_TITLE_FONT = Font(bold=True, size=TITLE_FONT_SIZE)
+_SUBTITLE_FONT = Font(italic=True, size=SUBTITLE_FONT_SIZE)
 _LABEL_FONT = Font(bold=True)
-_CENTER_ALIGNMENT = Alignment(horizontal="center", vertical="center")
-_DATA_ALIGNMENT = Alignment(horizontal="left", vertical="center")
+_ALTERNATE_FILL = PatternFill(fill_type="solid", fgColor=COLOR_ALTERNATE_ROW)
+_HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center")
+_DATA_ALIGNMENT = Alignment(vertical="top", wrap_text=True)
+_LABEL_ALIGNMENT = Alignment(horizontal="left", vertical="center")
 
 
 # =========================================================
@@ -359,17 +384,192 @@ def build_logs_rows(
 # Workbook Builder
 # =========================================================
 
-def _style_header_row(ws: Worksheet, num_columns: int) -> None:
-    """Apply the standard header styling to the first row."""
-    for column_index in range(1, num_columns + 1):
-        cell = ws.cell(row=1, column=column_index)
-        cell.font = _HEADER_FONT
+def _write_table(ws: Worksheet, frame: pd.DataFrame) -> Tuple[int, int]:
+    """Write a tabular DataFrame (header plus rows) to a worksheet.
+
+    Returns:
+        A ``(row_count, column_count)`` tuple describing the data written.
+    """
+    headers = list(frame.columns)
+    ws.append(headers)
+    for record in frame.fillna("").itertuples(index=False, name=None):
+        ws.append([_cell_value(value) for value in record])
+    return len(frame), len(headers)
+
+
+def _write_key_value(
+    ws: Worksheet,
+    title: str,
+    subtitle: str,
+    rows: List[Tuple[str, Any]],
+) -> Tuple[int, int]:
+    """Write a titled key/value dashboard layout to a worksheet.
+
+    Returns:
+        A ``(row_count, column_count)`` tuple describing the data written.
+    """
+    ws.append([title])
+    ws.append([subtitle])
+    ws.append([])
+    for label, value in rows:
+        ws.append([label, _cell_value(value)])
+
+    ws.merge_cells(
+        start_row=KEY_VALUE_TITLE_ROW,
+        start_column=1,
+        end_row=KEY_VALUE_TITLE_ROW,
+        end_column=KEY_VALUE_COLUMN_COUNT,
+    )
+    ws.merge_cells(
+        start_row=KEY_VALUE_SUBTITLE_ROW,
+        start_column=1,
+        end_row=KEY_VALUE_SUBTITLE_ROW,
+        end_column=KEY_VALUE_COLUMN_COUNT,
+    )
+    return len(rows), KEY_VALUE_COLUMN_COUNT
+
+
+def build_workbook(
+    partners_df: pd.DataFrame,
+    changes_df: pd.DataFrame,
+    summary_rows: List[Tuple[str, Any]],
+    logs_rows: List[Tuple[str, Any]],
+) -> Tuple[Workbook, List[Dict[str, Any]]]:
+    """Create the workbook, write every sheet, and describe each for formatting.
+
+    Returns:
+        The populated (unformatted) workbook and a list of sheet
+        specifications consumed by :func:`format_workbook`.
+    """
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    worksheets = {
+        name: workbook.create_sheet(name) for name in WORKSHEET_ORDER
+    }
+
+    specs: List[Dict[str, Any]] = []
+
+    summary_ws = worksheets[SUMMARY_SHEET]
+    rows, columns = _write_key_value(
+        summary_ws, REPORT_TITLE, REPORT_SUBTITLE, summary_rows
+    )
+    specs.append(_sheet_spec(summary_ws, SHEET_KIND_KEY_VALUE, rows, columns))
+
+    partners_ws = worksheets[PARTNERS_SHEET]
+    rows, columns = _write_table(partners_ws, partners_df)
+    specs.append(
+        _sheet_spec(
+            partners_ws, SHEET_KIND_TABLE, rows, columns,
+            freeze_first_column=True,
+        )
+    )
+
+    changes_ws = worksheets[CHANGES_SHEET]
+    rows, columns = _write_table(changes_ws, changes_df)
+    specs.append(_sheet_spec(changes_ws, SHEET_KIND_TABLE, rows, columns))
+
+    logs_ws = worksheets[LOGS_SHEET]
+    rows, columns = _write_key_value(
+        logs_ws, REPORT_TITLE, LOGS_SUBTITLE, logs_rows
+    )
+    specs.append(_sheet_spec(logs_ws, SHEET_KIND_KEY_VALUE, rows, columns))
+
+    return workbook, specs
+
+
+def _sheet_spec(
+    worksheet: Worksheet,
+    kind: str,
+    row_count: int,
+    column_count: int,
+    freeze_first_column: bool = False,
+) -> Dict[str, Any]:
+    """Build a formatting specification for a single worksheet."""
+    return {
+        "worksheet": worksheet,
+        "kind": kind,
+        "row_count": row_count,
+        "column_count": column_count,
+        "freeze_first_column": freeze_first_column,
+    }
+
+
+def save_workbook(workbook: Workbook) -> None:
+    """Persist the workbook to the configured output path (once)."""
+    output_path = Path(OUTPUT_EXCEL_FILE)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
+
+
+# =========================================================
+# Formatting
+# =========================================================
+
+def apply_header_style(ws: Worksheet, column_count: int) -> None:
+    """Style a table's header row: fill, font, alignment and border."""
+    for column_index in range(1, column_count + 1):
+        cell = ws.cell(row=TABLE_HEADER_ROW, column=column_index)
         cell.fill = _HEADER_FILL
-        cell.alignment = _CENTER_ALIGNMENT
+        cell.font = _HEADER_FONT
+        cell.alignment = _HEADER_ALIGNMENT
+        if ENABLE_BORDERS:
+            cell.border = _THIN_BORDER
 
 
-def _autofit_columns(ws: Worksheet) -> None:
-    """Size every column to fit its widest value within sensible bounds."""
+def apply_alignment(
+    ws: Worksheet,
+    column_count: int,
+    start_row: int,
+    alignment: Alignment,
+) -> None:
+    """Apply a shared alignment to a block of data cells."""
+    for row_cells in ws.iter_rows(min_row=start_row, max_col=column_count):
+        for cell in row_cells:
+            cell.alignment = alignment
+
+
+def apply_alternating_rows(
+    ws: Worksheet,
+    column_count: int,
+    start_row: int,
+    end_row: int,
+) -> None:
+    """Apply borders to data cells and shade alternating rows."""
+    if end_row < start_row:
+        return
+    for row_index in range(start_row, end_row + 1):
+        shade = ENABLE_ALTERNATE_ROWS and row_index % 2 == 0
+        for column_index in range(1, column_count + 1):
+            cell = ws.cell(row=row_index, column=column_index)
+            if ENABLE_BORDERS:
+                cell.border = _THIN_BORDER
+            if shade:
+                cell.fill = _ALTERNATE_FILL
+
+
+def apply_freeze_panes(ws: Worksheet, freeze_first_column: bool) -> None:
+    """Freeze the header row and, optionally, the first column."""
+    freeze_column = freeze_first_column and FREEZE_NAME_COLUMN
+    if not FREEZE_HEADER_ROW and not freeze_column:
+        return
+    column_letter = "B" if freeze_column else "A"
+    row_number = 2 if FREEZE_HEADER_ROW else 1
+    ws.freeze_panes = f"{column_letter}{row_number}"
+
+
+def apply_auto_filter(ws: Worksheet, row_count: int, column_count: int) -> None:
+    """Apply an auto filter across the populated table range."""
+    if not AUTO_FILTER or column_count == 0:
+        return
+    last_column = get_column_letter(column_count)
+    last_row = row_count + 1
+    ws.auto_filter.ref = f"A1:{last_column}{last_row}"
+
+
+def apply_column_widths(ws: Worksheet) -> None:
+    """Size every column to fit its widest value within configured bounds."""
+    if not AUTO_FIT_COLUMNS:
+        return
     for column_cells in ws.columns:
         longest = max(
             (
@@ -380,121 +580,68 @@ def _autofit_columns(ws: Worksheet) -> None:
             default=0,
         )
         letter = get_column_letter(column_cells[0].column)
-        width = min(
-            max(longest + COLUMN_WIDTH_PADDING, MIN_COLUMN_WIDTH),
-            MAX_COLUMN_WIDTH,
-        )
+        if longest < MIN_COLUMN_WIDTH:
+            width = MIN_COLUMN_WIDTH
+        elif longest > MAX_COLUMN_WIDTH:
+            width = MAX_COLUMN_WIDTH
+        else:
+            width = longest + COLUMN_WIDTH_PADDING
         ws.column_dimensions[letter].width = width
 
 
-def _freeze_panes(ws: Worksheet, freeze_first_column: bool) -> None:
-    """Freeze the header row and, optionally, the first column."""
-    freeze_column = freeze_first_column and FREEZE_NAME_COLUMN
-    if not FREEZE_HEADER_ROW and not freeze_column:
-        return
-    column_letter = "B" if freeze_column else "A"
-    row_number = 2 if FREEZE_HEADER_ROW else 1
-    ws.freeze_panes = f"{column_letter}{row_number}"
-
-
-def _apply_auto_filter(ws: Worksheet, row_count: int, column_count: int) -> None:
-    """Apply an auto filter across the populated table range."""
-    if not AUTO_FILTER or column_count == 0:
-        return
-    last_column = get_column_letter(column_count)
-    last_row = row_count + 1
-    ws.auto_filter.ref = f"A1:{last_column}{last_row}"
-
-
-def _write_table_sheet(
-    ws: Worksheet,
-    frame: pd.DataFrame,
-    freeze_first_column: bool,
-) -> None:
-    """Write a tabular DataFrame to a worksheet with full formatting."""
-    headers = list(frame.columns)
-    ws.append(headers)
-
-    for record in frame.fillna("").itertuples(index=False, name=None):
-        ws.append([_cell_value(value) for value in record])
-
-    _style_header_row(ws, len(headers))
-
-    for row_cells in ws.iter_rows(min_row=2, max_col=len(headers)):
-        for cell in row_cells:
-            cell.alignment = _DATA_ALIGNMENT
-
-    if AUTO_FIT_COLUMNS:
-        _autofit_columns(ws)
-    _freeze_panes(ws, freeze_first_column)
-    _apply_auto_filter(ws, len(frame), len(headers))
-
-
-def _write_key_value_sheet(
-    ws: Worksheet,
-    title: str,
-    subtitle: str,
-    rows: List[Tuple[str, Any]],
-) -> None:
-    """Write a titled key/value dashboard-style worksheet."""
-    ws.append([title])
-    ws.append([subtitle])
-    ws.append([])
-    for label, value in rows:
-        ws.append([label, _cell_value(value)])
-
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=2)
-
-    title_cell = ws.cell(row=1, column=1)
+def _apply_key_value_style(ws: Worksheet) -> None:
+    """Style a key/value sheet: title banner, subtitle and bold labels."""
+    title_cell = ws.cell(row=KEY_VALUE_TITLE_ROW, column=1)
     title_cell.font = _TITLE_FONT
     title_cell.fill = _TITLE_FILL
-    title_cell.alignment = _CENTER_ALIGNMENT
+    title_cell.alignment = _HEADER_ALIGNMENT
 
-    subtitle_cell = ws.cell(row=2, column=1)
+    subtitle_cell = ws.cell(row=KEY_VALUE_SUBTITLE_ROW, column=1)
     subtitle_cell.font = _SUBTITLE_FONT
-    subtitle_cell.alignment = _CENTER_ALIGNMENT
+    subtitle_cell.alignment = _HEADER_ALIGNMENT
 
-    for row_cells in ws.iter_rows(min_row=4, min_col=1, max_col=1):
-        for cell in row_cells:
-            cell.font = _LABEL_FONT
-
-    if AUTO_FIT_COLUMNS:
-        _autofit_columns(ws)
-
-
-def build_workbook(
-    partners_df: pd.DataFrame,
-    changes_df: pd.DataFrame,
-    summary_rows: List[Tuple[str, Any]],
-    logs_rows: List[Tuple[str, Any]],
-) -> Workbook:
-    """Assemble the complete workbook with all configured sheets."""
-    workbook = Workbook()
-    workbook.remove(workbook.active)
-
-    summary_sheet = workbook.create_sheet(SUMMARY_SHEET)
-    partners_sheet = workbook.create_sheet(PARTNERS_SHEET)
-    changes_sheet = workbook.create_sheet(CHANGES_SHEET)
-    logs_sheet = workbook.create_sheet(LOGS_SHEET)
-
-    _write_key_value_sheet(
-        summary_sheet, REPORT_TITLE, REPORT_SUBTITLE, summary_rows
-    )
-    _write_table_sheet(partners_sheet, partners_df, freeze_first_column=True)
-    _write_table_sheet(changes_sheet, changes_df, freeze_first_column=False)
-    _write_key_value_sheet(
-        logs_sheet, REPORT_TITLE, LOGS_SUBTITLE, logs_rows
-    )
-
-    return workbook
+    for row_index in range(KEY_VALUE_DATA_START_ROW, ws.max_row + 1):
+        label_cell = ws.cell(row=row_index, column=1)
+        value_cell = ws.cell(row=row_index, column=2)
+        label_cell.font = _LABEL_FONT
+        label_cell.alignment = _LABEL_ALIGNMENT
+        value_cell.alignment = _LABEL_ALIGNMENT
+        if ENABLE_BORDERS:
+            label_cell.border = _THIN_BORDER
+            value_cell.border = _THIN_BORDER
 
 
-def save_workbook(workbook: Workbook) -> None:
-    """Persist the workbook to the configured output path."""
-    output_path = Path(OUTPUT_EXCEL_FILE)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(output_path)
+def _apply_worksheet_view(ws: Worksheet) -> None:
+    """Apply workbook view options (gridline visibility)."""
+    ws.sheet_view.showGridLines = SHOW_GRIDLINES
+
+
+def format_sheet(spec: Dict[str, Any]) -> None:
+    """Apply the full formatting appropriate to one worksheet."""
+    ws = spec["worksheet"]
+    column_count = spec["column_count"]
+    row_count = spec["row_count"]
+
+    if spec["kind"] == SHEET_KIND_TABLE:
+        apply_header_style(ws, column_count)
+        apply_alignment(ws, column_count, TABLE_DATA_START_ROW, _DATA_ALIGNMENT)
+        apply_alternating_rows(
+            ws, column_count, TABLE_DATA_START_ROW, row_count + 1
+        )
+        apply_column_widths(ws)
+        apply_freeze_panes(ws, spec["freeze_first_column"])
+        apply_auto_filter(ws, row_count, column_count)
+    else:
+        _apply_key_value_style(ws)
+        apply_column_widths(ws)
+
+    _apply_worksheet_view(ws)
+
+
+def format_workbook(specs: List[Dict[str, Any]]) -> None:
+    """Apply formatting to every worksheet in the workbook."""
+    for spec in specs:
+        format_sheet(spec)
 
 
 # =========================================================
@@ -525,7 +672,7 @@ def print_summary(
 # =========================================================
 
 def main() -> None:
-    """Build and save the final Excel deliverable."""
+    """Build, format and save the final Excel deliverable in one pass."""
     start_time = time.perf_counter()
     start_timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
 
@@ -557,9 +704,10 @@ def main() -> None:
         len(details_df), change_stats["total"], generated_time
     )
 
-    workbook = build_workbook(
+    workbook, specs = build_workbook(
         partners_df, changes_df, summary_rows, logs_rows
     )
+    format_workbook(specs)
     save_workbook(workbook)
 
     duration = time.perf_counter() - start_time

@@ -31,12 +31,17 @@ import pandas as pd
 from config import (
     CHANGE_LOG_COLUMNS,
     CHANGE_LOG_FILE,
+    CHANGE_TYPE_NEW_PARTNER,
+    CHANGE_TYPE_REMOVED_PARTNER,
     CSV_INDEX,
     ENABLE_CHANGE_LOG,
     FILE_ENCODING,
+    NEW_PARTNER_NEW_VALUE,
     PARTNER_DETAILS_FILE,
     PARTNER_DETAILS_PREVIOUS_FILE,
     PROJECT_NAME,
+    REMOVED_PARTNER_NEW_VALUE,
+    REMOVED_PARTNER_OLD_VALUE,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
     SUMMARY_BORDER,
@@ -51,15 +56,6 @@ PARTNER_NAME_COLUMN = "partner_name"
 
 # Change log column that stores the type of each change.
 CHANGE_TYPE_COLUMN = "change_type"
-
-# Change types that are not tied to a tracked field.
-CHANGE_TYPE_NEW_PARTNER = "NEW_PARTNER"
-CHANGE_TYPE_REMOVED_PARTNER = "REMOVED_PARTNER"
-
-# Value labels recorded for partner additions and removals.
-NEW_PARTNER_NEW_VALUE = "Added"
-REMOVED_PARTNER_OLD_VALUE = "Present"
-REMOVED_PARTNER_NEW_VALUE = "Removed"
 
 # Columns that must exist in every snapshot before comparison.
 REQUIRED_SNAPSHOT_COLUMNS = [PARTNER_NAME_COLUMN, *TRACKED_CHANGE_FIELDS]
@@ -143,12 +139,24 @@ def load_snapshot(file_path: str, label: str) -> pd.DataFrame:
 def build_lookup(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
     """Index snapshot rows by partner name for O(1) comparison.
 
-    When a partner name appears more than once, the last occurrence
-    wins, matching the previous behavior.
+    Partner names are converted to strings and stripped of surrounding
+    whitespace so incidental whitespace differences do not surface as
+    false additions or removals. When a partner name appears more than
+    once, the last occurrence wins, matching the previous behavior.
     """
+    normalized_names = [
+        str(name).strip() for name in frame[PARTNER_NAME_COLUMN]
+    ]
+    duplicate_count = len(normalized_names) - len(set(normalized_names))
+    if duplicate_count > 0:
+        log(
+            f"Duplicate partner names detected: {duplicate_count}",
+            "WARNING",
+        )
+
     lookup: Dict[str, Dict[str, Any]] = {}
     for record in frame.to_dict("records"):
-        partner_name = record.get(PARTNER_NAME_COLUMN, "")
+        partner_name = str(record.get(PARTNER_NAME_COLUMN, "")).strip()
         lookup[partner_name] = record
     return lookup
 
@@ -344,7 +352,12 @@ def main() -> None:
     _validate_snapshot_exists(PARTNER_DETAILS_FILE, "current")
 
     current_df = load_snapshot(PARTNER_DETAILS_FILE, "current")
+    if current_df.empty:
+        log("Current snapshot is empty.", "WARNING")
+
     previous_df = load_snapshot(PARTNER_DETAILS_PREVIOUS_FILE, "previous")
+    if previous_df.empty:
+        log("Previous snapshot is empty.", "WARNING")
 
     _validate_columns(current_df, REQUIRED_SNAPSHOT_COLUMNS, "current")
     _validate_columns(previous_df, REQUIRED_SNAPSHOT_COLUMNS, "previous")

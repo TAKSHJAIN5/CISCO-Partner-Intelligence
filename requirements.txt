@@ -1,3 +1,10 @@
+# Cisco Partner Intelligence Automation Platform
+
+# HTTP requests
 requests==2.32.4
+
+# Data processing
 pandas==2.3.1
+
+# Excel generation and formatting
 openpyxl==3.1.5

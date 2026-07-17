@@ -24,6 +24,7 @@ Version:
 ===========================================================
 """
 
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +52,7 @@ from config import (
     COLUMN_WIDTH_PADDING,
     ENABLE_ALTERNATE_ROWS,
     ENABLE_BORDERS,
+    FILE_ENCODING,
     FREEZE_HEADER_ROW,
     FREEZE_NAME_COLUMN,
     HEADER_FONT_SIZE,
@@ -68,8 +70,10 @@ from config import (
     PREFERRED_SECURITY_PORTFOLIO,
     PROJECT_NAME,
     QUALIFICATION_SEPARATOR,
+    REPORT_SUMMARY_FILE,
     REPORT_SUBTITLE,
     REPORT_TITLE,
+    RUN_BY,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
     SHOW_GRIDLINES,
@@ -108,6 +112,13 @@ NO_LABEL = "No"
 # Worksheet layout kinds, used to select the correct formatting.
 SHEET_KIND_TABLE = "table"
 SHEET_KIND_KEY_VALUE = "key_value"
+
+# Machine-readable report summary (for Power Automate and future
+# integrations). The schema version is independent of the platform
+# version and is bumped only when the JSON contract changes.
+REPORT_SUMMARY_VERSION = "1.1"
+EXECUTION_WORKFLOW = "Cisco Partner Intelligence"
+EXECUTION_GENERATED_BY = "build_final_excel.py"
 
 # Key/value sheet layout: title, subtitle, blank spacer, then data.
 KEY_VALUE_TITLE_ROW = 1
@@ -501,6 +512,70 @@ def save_workbook(workbook: Workbook) -> None:
     workbook.save(output_path)
 
 
+def write_report_summary(
+    total_partners: int,
+    countries: int,
+    cities: int,
+    change_stats: Dict[str, int],
+) -> None:
+    """Write the machine-readable JSON report summary.
+
+    This artifact is consumed only by downstream integrations
+    (Power Automate, Teams, and future workflows); it is not a
+    user-facing report. All values are reused from the current run's
+    in-memory results, so no CSV or workbook is re-read.
+
+    Parameters
+    ----------
+    total_partners:
+        Number of partners in the current details snapshot.
+    countries:
+        Count of distinct countries.
+    cities:
+        Count of distinct cities.
+    change_stats:
+        Change counts as returned by :func:`summarize_changes`.
+    """
+    summary: Dict[str, Any] = {
+        "report": {
+            "name": REPORT_TITLE,
+            "generated_on": datetime.now().isoformat(timespec="seconds"),
+            "version": REPORT_SUMMARY_VERSION,
+        },
+        "summary": {
+            "total_partners": total_partners,
+            "countries": countries,
+            "cities": cities,
+        },
+        "changes": {
+            "new_partners": change_stats["new"],
+            "removed_partners": change_stats["removed"],
+            "portfolio_changes": change_stats["portfolio"],
+            "competency_changes": change_stats["competency"],
+            "location_changes": change_stats["location"],
+            "total_change_records": change_stats["total"],
+        },
+        "files": {
+            "excel_report": Path(OUTPUT_EXCEL_FILE).name,
+        },
+        "execution": {
+            "environment": RUN_BY,
+            "workflow": EXECUTION_WORKFLOW,
+            "generated_by": EXECUTION_GENERATED_BY,
+        },
+        "status": {
+            "success": True,
+        },
+    }
+
+    output_path = Path(REPORT_SUMMARY_FILE)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding=FILE_ENCODING) as summary_file:
+        json.dump(summary, summary_file, indent=4)
+
+    log(f"Report summary written: {REPORT_SUMMARY_FILE}")
+
+
 # =========================================================
 # Formatting
 # =========================================================
@@ -709,6 +784,7 @@ def main() -> None:
     )
     format_workbook(specs)
     save_workbook(workbook)
+    write_report_summary(len(details_df), countries, cities, change_stats)
 
     duration = time.perf_counter() - start_time
     print_summary(

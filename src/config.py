@@ -425,6 +425,39 @@ MAX_COLUMN_WIDTH = 60
 COLUMN_WIDTH_PADDING = 3
 
 # =========================================================
+# Pipeline Execution
+# =========================================================
+# Scripts executed, in order, by run_all.py. Formatting is now
+# handled inside build_final_excel.py, so there is no separate
+# formatting stage.
+
+PIPELINE_SCRIPTS = [
+    "src/collect_partner_inventory.py",
+    "src/get_partner_details.py",
+    "src/detect_changes.py",
+    "src/build_final_excel.py",
+]
+
+# =========================================================
+# Run History
+# =========================================================
+# Layout and status colors for the run-history workbook.
+
+RUN_HISTORY_SHEET_NAME = "Run History"
+
+RUN_HISTORY_HEADERS = [
+    "Timestamp",
+    "Status",
+    "Duration (mins)",
+]
+
+RUN_HISTORY_HEADER_COLOR = COLOR_HEADER
+
+RUN_HISTORY_SUCCESS_COLOR = "008000"
+
+RUN_HISTORY_FAILURE_COLOR = "FF0000"
+
+# =========================================================
 # Qualification Categories
 # =========================================================
 # Categories exposed by getPartnerOverview. Any category

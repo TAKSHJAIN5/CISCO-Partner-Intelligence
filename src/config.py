@@ -3,7 +3,7 @@
 Cisco Partner Intelligence Automation Platform
 ===========================================================
 
-Version : 2.1.0
+Version : 1.0.0
 
 Author  : Taksh Jain
 Company : NetCom Learning
@@ -308,6 +308,29 @@ REQUIRED_INVENTORY_COLUMNS = (
     "be_geo_id",
     "location_id",
 )
+
+# =========================================================
+# Change Log Schema
+# =========================================================
+# Column contract for the change log produced by
+# detect_changes.py, plus the mapping of snapshot fields that
+# are compared between runs. Add a new entry to
+# TRACKED_CHANGE_FIELDS to track an additional field; no script
+# changes are required.
+
+CHANGE_LOG_COLUMNS = [
+    "timestamp",
+    "partner_name",
+    "change_type",
+    "old_value",
+    "new_value",
+]
+
+TRACKED_CHANGE_FIELDS = {
+    "portfolios": "PORTFOLIO_CHANGED",
+    "competencies": "COMPETENCY_CHANGED",
+    "location": "LOCATION_CHANGED",
+}
 
 # =========================================================
 # Qualification Categories

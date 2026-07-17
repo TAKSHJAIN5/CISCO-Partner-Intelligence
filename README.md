@@ -1,279 +1,193 @@
-# Cisco Partner Automation
+# Cisco Partner Intelligence Automation Platform
 
 ## Overview
 
-Cisco Partner Automation is an internal NetCom Learning solution that automates the collection, enrichment, validation, change tracking, and reporting of Cisco Partner Locator data.
+The Cisco Partner Intelligence Automation Platform is an internal automation solution developed for NetCom Learning to streamline the collection, enrichment, change detection, and reporting of Cisco Partner Locator data.
 
-The solution replaces a manual spreadsheet maintenance process by automatically extracting Cisco partner information, applying business logic, tracking changes between refreshes, and generating a formatted Excel workbook for business users.
-
----
-
-## Business Objective
-
-* Eliminate manual Cisco partner data collection.
-* Maintain an up-to-date partner intelligence repository.
-* Reduce stale partner information.
-* Improve visibility into partner portfolio and competency changes.
-* Provide a business-ready Excel workbook for partner management and marketing teams.
+The platform replaces a manual spreadsheet maintenance process with a fully automated ETL pipeline that retrieves Cisco partner information, enriches partner records, detects business-critical changes between refreshes, and generates a professionally formatted Excel report for business users.
 
 ---
 
-## Refresh Frequency
+# Business Objectives
 
-Bi-Weekly
+- Eliminate manual Cisco partner data collection.
+- Maintain a centralized and up-to-date partner intelligence repository.
+- Detect meaningful changes between data refreshes.
+- Improve visibility into partner portfolios, competencies, and geographic coverage.
+- Deliver a business-ready Excel report for marketing and partner management teams.
 
 ---
 
-## Project Structure
+# Key Features
+
+- Automated Cisco Partner Locator data collection
+- Partner detail enrichment
+- Snapshot-based change detection
+- Executive summary generation
+- Business-friendly Excel reporting
+- Run history tracking
+- Execution logging
+- Configuration-driven architecture
+- Suitable for scheduled unattended execution
+
+---
+
+# Architecture
+
+```text
+run_all.py
+      │
+      ▼
+collect_partner_inventory.py
+      │
+      ▼
+get_partner_details.py
+      │
+      ▼
+detect_changes.py
+      │
+      ▼
+build_final_excel.py
+      │
+      ▼
+Cisco Partner Intelligence Report.xlsx
+```
+
+---
+
+# Project Structure
 
 ```text
 CiscoPartnerAutomation/
 
-run_all.py
-
-src/
 │
-├── collect_partner_inventory.py
-├── get_partner_details.py
-├── detect_changes.py
-├── build_final_excel.py
-├── format_excel.py
-├── config.py
-└── logger.py
-
-data/
+├── run_all.py
+├── requirements.txt
+├── README.md
+├── INSTALLATION.md
 │
-├── partner_inventory.csv
-├── partner_details.csv
-├── partner_details_previous.csv
+├── src/
+│   ├── config.py
+│   ├── logger.py
+│   ├── collect_partner_inventory.py
+│   ├── get_partner_details.py
+│   ├── detect_changes.py
+│   └── build_final_excel.py
 │
-└── logs/
-    ├── changes_log.csv
-    └── failed_partners.csv
-
-output/
+├── data/
+│   ├── partner_inventory.csv
+│   ├── partner_details.csv
+│   ├── partner_details_previous.csv
+│   └── logs/
+│       ├── changes_log.csv
+│       ├── failed_partners.csv
+│       ├── run_log.txt
+│       └── Run_History.xlsx
 │
-└── Cisco_Partner_Master.xlsx
-
-requirements.txt
-README.md
+└── output/
+    └── Cisco_Partner_Intelligence_Report.xlsx
 ```
 
 ---
 
-## First-Time Setup (One-Time Only)
+# Core Components
 
-### Step 1 – Open PowerShell
+## collect_partner_inventory.py
 
-```powershell
-cd C:\Users\Dell\Desktop\CiscoPartnerAutomation
-```
-
-### Step 2 – Create Virtual Environment
-
-```powershell
-python -m venv venv
-```
-
-### Step 3 – Activate Virtual Environment
-
-```powershell
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& .\venv\Scripts\Activate.ps1)
-```
-
-### Step 4 – Install Dependencies
-
-```powershell
-pip install -r requirements.txt
-```
+Collects Cisco partner inventory matching the configured business filters.
 
 ---
 
-## Refresh Process (Every 2 Weeks)
+## get_partner_details.py
 
-### Step 1 – Open PowerShell
-
-```powershell
-cd C:\Users\Dell\Desktop\CiscoPartnerAutomation
-```
-
-### Step 2 – Activate Virtual Environment
-
-```powershell
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& .\venv\Scripts\Activate.ps1)
-```
-
-### Step 3 – Run Full Refresh
-
-```powershell
-python run_all.py
-```
+Retrieves detailed information for every collected Cisco partner.
 
 ---
 
-## What Happens During Refresh
+## detect_changes.py
 
-### 1. Partner Inventory Collection
+Compares the latest snapshot with the previous snapshot and detects:
 
-Collects all Cisco partners matching the configured portfolio and competency filters.
-
-Output:
-
-```text
-data/partner_inventory.csv
-```
+- New Partners
+- Removed Partners
+- Portfolio Changes
+- Competency Changes
+- Location Changes
 
 ---
 
-### 2. Partner Detail Collection
+## build_final_excel.py
 
-Retrieves detailed information for each partner.
+Generates the final business report by:
 
-Output:
-
-```text
-data/partner_details.csv
-```
-
-Before creating a new file, the previous version is automatically backed up as:
-
-```text
-data/partner_details_previous.csv
-```
+- Transforming partner data
+- Building an executive summary
+- Including change history
+- Applying professional workbook formatting
+- Producing the final Excel deliverable
 
 ---
 
-### 3. Change Detection
+## config.py
 
-Compares:
+Centralized configuration for the entire platform, including:
 
-```text
-partner_details_previous.csv
-```
-
-vs
-
-```text
-partner_details.csv
-```
-
-and identifies:
-
-* New Partners
-* Removed Partners
-* Portfolio Changes
-* Competency Changes
-* Location Changes
-
-Output:
-
-```text
-data/logs/changes_log.csv
-```
+- File paths
+- API settings
+- Report settings
+- Excel formatting
+- Pipeline configuration
+- Business rules
 
 ---
 
-### 4. Excel Generation
+## logger.py
 
-Transforms partner data into the business reporting structure.
-
-Output:
-
-```text
-output/Cisco_Partner_Master.xlsx
-```
+Provides consistent console and file logging across the entire platform.
 
 ---
 
-### 5. Excel Formatting
+# Generated Outputs
 
-Applies:
-
-* Professional header formatting
-* Frozen header row
-* Frozen Name column
-* Filters
-* Alternate row shading
-* Auto-sized columns
-* Business-friendly layout
-
----
-
-## Final Deliverable
-
-```text
-output/Cisco_Partner_Master.xlsx
-```
-
-Columns:
-
-* Name
-* Preferred Portfolios
-* Non Preferred Portfolios
-* Sec Net Spez
-* Sec AI Infra Spez
-* Preferred NW
-* Preferred SEC
-* Preferred Cloud + AI
-* Competencies
-* Location
+| File | Purpose |
+|------|---------|
+| partner_inventory.csv | Raw Cisco partner inventory |
+| partner_details.csv | Latest partner snapshot |
+| partner_details_previous.csv | Previous snapshot used for comparison |
+| changes_log.csv | Change history between snapshots |
+| failed_partners.csv | Partners that could not be processed |
+| run_log.txt | Detailed execution log |
+| Run_History.xlsx | Historical execution records |
+| Cisco_Partner_Intelligence_Report.xlsx | Final business report |
 
 ---
 
-## Dependencies
+# Technology Stack
 
-Install using:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Packages:
-
-```text
-requests
-pandas
-openpyxl
-```
+- Python
+- Requests
+- Pandas
+- OpenPyXL
 
 ---
 
-## Troubleshooting
+# Refresh Frequency
 
-### Excel File Open Error
+Recommended: **Bi-Weekly**
 
-If the workbook is open while formatting runs, close:
-
-```text
-Cisco_Partner_Master.xlsx
-```
-
-and rerun:
-
-```powershell
-python run_all.py
-```
+The platform is designed for scheduled execution using Windows Task Scheduler, GitHub Actions, or any equivalent scheduling solution.
 
 ---
 
-### Missing Python Packages
+# Documentation
 
-```powershell
-pip install -r requirements.txt
-```
-
----
-
-### Virtual Environment Not Active
-
-```powershell
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& .\venv\Scripts\Activate.ps1)
-```
+- INSTALLATION.md — Installation and setup guide
+- README.md — Project overview and architecture
 
 ---
 
-## Owner
+# Author
 
-Taksh Jain
+**Taksh Jain**
 
 NetCom Learning

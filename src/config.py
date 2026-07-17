@@ -332,6 +332,17 @@ TRACKED_CHANGE_FIELDS = {
     "location": "LOCATION_CHANGED",
 }
 
+# Change types and value labels for partner additions and removals.
+CHANGE_TYPE_NEW_PARTNER = "NEW_PARTNER"
+
+CHANGE_TYPE_REMOVED_PARTNER = "REMOVED_PARTNER"
+
+NEW_PARTNER_NEW_VALUE = "Added"
+
+REMOVED_PARTNER_OLD_VALUE = "Present"
+
+REMOVED_PARTNER_NEW_VALUE = "Removed"
+
 # =========================================================
 # Qualification Categories
 # =========================================================

@@ -3,7 +3,7 @@
 Cisco Partner Intelligence Automation Platform
 ===========================================================
 
-Version : 1.0.0
+Version : 2.1.0
 
 Author  : Taksh Jain
 Company : NetCom Learning
@@ -232,6 +232,16 @@ ENABLE_CHANGE_LOG = True
 ENABLE_RUN_LOG = True
 
 # =========================================================
+# CSV Write Defaults
+# =========================================================
+# Applied to every CSV written across the project so output
+# encoding and indexing stay consistent.
+
+CSV_INDEX = False
+
+FILE_ENCODING = "utf-8"
+
+# =========================================================
 # Excel Configuration
 # =========================================================
 
@@ -371,13 +381,3 @@ REQUEST_HEADERS = {
     "Content-Type": CONTENT_TYPE_JSON,
     "Connection": CONNECTION_KEEP_ALIVE,
 }
-
-# =========================================================
-# File Defaults
-# =========================================================
-
-# Default text encoding for CSV, logs and other text files.
-FILE_ENCODING = "utf-8"
-
-# Default DataFrame index behavior when writing CSV files.
-CSV_INDEX = False

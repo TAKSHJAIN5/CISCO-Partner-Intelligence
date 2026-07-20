@@ -28,7 +28,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from openpyxl import Workbook
@@ -120,6 +120,19 @@ REPORT_SUMMARY_VERSION = "1.1"
 EXECUTION_WORKFLOW = "Cisco Partner Intelligence"
 EXECUTION_GENERATED_BY = "build_final_excel.py"
 
+# Comparison state, used when no previous snapshot exists yet (the
+# initial pipeline run, before detect_changes has produced a log).
+COMPARISON_STATUS_INITIAL = "initial_run"
+COMPARISON_STATUS_COMPARED = "compared"
+SUMMARY_COMPARISON_LABEL = "Comparison Status"
+SUMMARY_COMPARISON_INITIAL = "Initial run - no previous snapshot available"
+SUMMARY_COMPARISON_COMPARED = "Compared against previous snapshot"
+CHANGES_INITIAL_RUN_MESSAGE = (
+    "No previous snapshot available. "
+    "Change detection will begin from the next execution."
+)
+CHANGES_NO_CHANGES_MESSAGE = "No changes detected in this run."
+
 # Key/value sheet layout: title, subtitle, blank spacer, then data.
 KEY_VALUE_TITLE_ROW = 1
 KEY_VALUE_SUBTITLE_ROW = 2
@@ -145,6 +158,10 @@ _ALTERNATE_FILL = PatternFill(fill_type="solid", fgColor=COLOR_ALTERNATE_ROW)
 _HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center")
 _DATA_ALIGNMENT = Alignment(vertical="top", wrap_text=True)
 _LABEL_ALIGNMENT = Alignment(horizontal="left", vertical="center")
+_MESSAGE_FONT = Font(italic=True)
+_MESSAGE_ALIGNMENT = Alignment(
+    horizontal="center", vertical="center", wrap_text=True
+)
 
 
 # =========================================================
@@ -273,6 +290,33 @@ def load_dataset(
     return frame
 
 
+def load_change_log() -> Tuple[pd.DataFrame, bool]:
+    """Load the change log, tolerating its absence on the first run.
+
+    ``detect_changes.py`` only produces the change log once a previous
+    snapshot exists, so on the initial pipeline run the file is missing.
+    In that case an empty log with the canonical schema is returned and
+    the pipeline continues rather than failing.
+
+    Returns
+    -------
+    tuple
+        A ``(changes_df, previous_snapshot_available)`` pair. The flag is
+        ``False`` on the initial run and ``True`` once a change log exists.
+    """
+    if Path(CHANGE_LOG_FILE).exists():
+        changes_df = load_dataset(
+            CHANGE_LOG_FILE, "changes log", CHANGE_LOG_COLUMNS
+        )
+        return changes_df, True
+
+    log(
+        "No change log found; treating this as the initial pipeline run.",
+        "WARNING",
+    )
+    return pd.DataFrame(columns=CHANGE_LOG_COLUMNS), False
+
+
 # =========================================================
 # Business Transformations
 # =========================================================
@@ -356,8 +400,14 @@ def build_summary_rows(
     cities: int,
     change_stats: Dict[str, int],
     generated_time: str,
+    previous_snapshot: bool,
 ) -> List[Tuple[str, Any]]:
     """Assemble the Executive Summary key/value rows."""
+    comparison_status = (
+        SUMMARY_COMPARISON_COMPARED
+        if previous_snapshot
+        else SUMMARY_COMPARISON_INITIAL
+    )
     return [
         ("Generated Time", generated_time),
         ("Project Name", PROJECT_NAME),
@@ -371,6 +421,7 @@ def build_summary_rows(
         ("Competency Changes", change_stats["competency"]),
         ("Location Changes", change_stats["location"]),
         ("Total Change Records", change_stats["total"]),
+        (SUMMARY_COMPARISON_LABEL, comparison_status),
     ]
 
 
@@ -406,6 +457,35 @@ def _write_table(ws: Worksheet, frame: pd.DataFrame) -> Tuple[int, int]:
     for record in frame.fillna("").itertuples(index=False, name=None):
         ws.append([_cell_value(value) for value in record])
     return len(frame), len(headers)
+
+
+def _write_changes_sheet(
+    ws: Worksheet,
+    changes_df: pd.DataFrame,
+    empty_message: str,
+) -> Tuple[int, int, Optional[int]]:
+    """Write the Changes sheet, showing a message when there are no records.
+
+    Returns:
+        A ``(row_count, column_count, message_row)`` tuple. ``message_row``
+        is the row holding the empty-state message, or ``None`` when change
+        records were written.
+    """
+    if not changes_df.empty:
+        row_count, column_count = _write_table(ws, changes_df)
+        return row_count, column_count, None
+
+    headers = list(changes_df.columns)
+    ws.append(headers)
+    message_row = TABLE_DATA_START_ROW
+    ws.append([empty_message])
+    ws.merge_cells(
+        start_row=message_row,
+        start_column=1,
+        end_row=message_row,
+        end_column=len(headers),
+    )
+    return 0, len(headers), message_row
 
 
 def _write_key_value(
@@ -445,6 +525,7 @@ def build_workbook(
     changes_df: pd.DataFrame,
     summary_rows: List[Tuple[str, Any]],
     logs_rows: List[Tuple[str, Any]],
+    changes_empty_message: str,
 ) -> Tuple[Workbook, List[Dict[str, Any]]]:
     """Create the workbook, write every sheet, and describe each for formatting.
 
@@ -476,8 +557,15 @@ def build_workbook(
     )
 
     changes_ws = worksheets[CHANGES_SHEET]
-    rows, columns = _write_table(changes_ws, changes_df)
-    specs.append(_sheet_spec(changes_ws, SHEET_KIND_TABLE, rows, columns))
+    rows, columns, message_row = _write_changes_sheet(
+        changes_ws, changes_df, changes_empty_message
+    )
+    specs.append(
+        _sheet_spec(
+            changes_ws, SHEET_KIND_TABLE, rows, columns,
+            message_row=message_row,
+        )
+    )
 
     logs_ws = worksheets[LOGS_SHEET]
     rows, columns = _write_key_value(
@@ -494,6 +582,7 @@ def _sheet_spec(
     row_count: int,
     column_count: int,
     freeze_first_column: bool = False,
+    message_row: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Build a formatting specification for a single worksheet."""
     return {
@@ -502,6 +591,7 @@ def _sheet_spec(
         "row_count": row_count,
         "column_count": column_count,
         "freeze_first_column": freeze_first_column,
+        "message_row": message_row,
     }
 
 
@@ -517,6 +607,7 @@ def write_report_summary(
     countries: int,
     cities: int,
     change_stats: Dict[str, int],
+    previous_snapshot: bool,
 ) -> None:
     """Write the machine-readable JSON report summary.
 
@@ -535,7 +626,15 @@ def write_report_summary(
         Count of distinct cities.
     change_stats:
         Change counts as returned by :func:`summarize_changes`.
+    previous_snapshot:
+        ``True`` when a previous snapshot was compared, ``False`` on the
+        initial pipeline run when no change log existed yet.
     """
+    comparison_status = (
+        COMPARISON_STATUS_COMPARED
+        if previous_snapshot
+        else COMPARISON_STATUS_INITIAL
+    )
     summary: Dict[str, Any] = {
         "report": {
             "name": REPORT_TITLE,
@@ -554,6 +653,10 @@ def write_report_summary(
             "competency_changes": change_stats["competency"],
             "location_changes": change_stats["location"],
             "total_change_records": change_stats["total"],
+        },
+        "comparison": {
+            "status": comparison_status,
+            "previous_snapshot": previous_snapshot,
         },
         "files": {
             "excel_report": Path(OUTPUT_EXCEL_FILE).name,
@@ -686,6 +789,16 @@ def _apply_key_value_style(ws: Worksheet) -> None:
             value_cell.border = _THIN_BORDER
 
 
+def _style_message_row(ws: Worksheet, row: int, column_count: int) -> None:
+    """Style an empty-state message row: italic, centered, bordered."""
+    for column_index in range(1, column_count + 1):
+        cell = ws.cell(row=row, column=column_index)
+        cell.font = _MESSAGE_FONT
+        cell.alignment = _MESSAGE_ALIGNMENT
+        if ENABLE_BORDERS:
+            cell.border = _THIN_BORDER
+
+
 def _apply_worksheet_view(ws: Worksheet) -> None:
     """Apply workbook view options (gridline visibility)."""
     ws.sheet_view.showGridLines = SHOW_GRIDLINES
@@ -696,6 +809,7 @@ def format_sheet(spec: Dict[str, Any]) -> None:
     ws = spec["worksheet"]
     column_count = spec["column_count"]
     row_count = spec["row_count"]
+    message_row = spec.get("message_row")
 
     if spec["kind"] == SHEET_KIND_TABLE:
         apply_header_style(ws, column_count)
@@ -706,6 +820,8 @@ def format_sheet(spec: Dict[str, Any]) -> None:
         apply_column_widths(ws)
         apply_freeze_panes(ws, spec["freeze_first_column"])
         apply_auto_filter(ws, row_count, column_count)
+        if message_row is not None:
+            _style_message_row(ws, message_row, column_count)
     else:
         _apply_key_value_style(ws)
         apply_column_widths(ws)
@@ -763,9 +879,7 @@ def main() -> None:
     details_df = load_dataset(
         PARTNER_DETAILS_FILE, "partner details", REQUIRED_PARTNER_COLUMNS
     )
-    changes_df = load_dataset(
-        CHANGE_LOG_FILE, "changes log", CHANGE_LOG_COLUMNS
-    )
+    changes_df, previous_snapshot = load_change_log()
 
     partners_df = build_partner_dataframe(details_df)
     countries, cities = summarize_locations(details_df)
@@ -773,18 +887,28 @@ def main() -> None:
 
     generated_time = datetime.now().strftime(TIMESTAMP_FORMAT)
     summary_rows = build_summary_rows(
-        len(details_df), countries, cities, change_stats, generated_time
+        len(details_df), countries, cities, change_stats,
+        generated_time, previous_snapshot,
     )
     logs_rows = build_logs_rows(
         len(details_df), change_stats["total"], generated_time
     )
 
+    changes_empty_message = (
+        CHANGES_NO_CHANGES_MESSAGE
+        if previous_snapshot
+        else CHANGES_INITIAL_RUN_MESSAGE
+    )
+
     workbook, specs = build_workbook(
-        partners_df, changes_df, summary_rows, logs_rows
+        partners_df, changes_df, summary_rows, logs_rows,
+        changes_empty_message,
     )
     format_workbook(specs)
     save_workbook(workbook)
-    write_report_summary(len(details_df), countries, cities, change_stats)
+    write_report_summary(
+        len(details_df), countries, cities, change_stats, previous_snapshot
+    )
 
     duration = time.perf_counter() - start_time
     print_summary(

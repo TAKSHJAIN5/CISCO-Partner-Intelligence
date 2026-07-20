@@ -93,6 +93,19 @@ PARTNER_NAME_COLUMN = "partner_name"
 PORTFOLIOS_COLUMN = "portfolios"
 COMPETENCIES_COLUMN = "competencies"
 LOCATION_COLUMN = "location"
+WEBSITE_COLUMN = "website"
+PARTNER_SINCE_COLUMN = "partner_since"
+PHONE_COLUMN = "phone"
+FAX_COLUMN = "fax"
+DESCRIPTION_COLUMN = "description"
+ADDITIONAL_LOCATIONS_COLUMN = "additional_locations"
+INDUSTRY_KEYWORDS_COLUMN = "industry_keywords"
+TECHNOLOGY_KEYWORDS_COLUMN = "technology_keywords"
+COMPANY_SIZE_KEYWORDS_COLUMN = "company_size_keywords"
+
+# Labels used when composing the presentation-only Contact Details column.
+CONTACT_PHONE_PREFIX = "Phone: "
+CONTACT_FAX_PREFIX = "Fax: "
 
 # Change log column that stores the type of each change.
 CHANGE_TYPE_COLUMN = "change_type"
@@ -236,6 +249,22 @@ def _classify_portfolios(
     return preferred, non_preferred
 
 
+def _format_contact_details(phone: str, fax: str) -> str:
+    """Combine phone and fax into a single presentation value.
+
+    Renders one labeled line per available value ("Phone: ..." / "Fax: ...").
+    If the fax is empty only the phone line is shown, and if both are empty
+    the result is an empty string so the cell stays blank. This formatting is
+    presentation-only; the master CSV keeps phone and fax as separate columns.
+    """
+    lines: List[str] = []
+    if phone:
+        lines.append(f"{CONTACT_PHONE_PREFIX}{phone}")
+    if fax:
+        lines.append(f"{CONTACT_FAX_PREFIX}{fax}")
+    return "\n".join(lines)
+
+
 # =========================================================
 # Filesystem & Validation
 # =========================================================
@@ -322,7 +351,12 @@ def load_change_log() -> Tuple[pd.DataFrame, bool]:
 # =========================================================
 
 def _build_partner_row(row: pd.Series) -> Dict[str, Any]:
-    """Transform one raw partner record into the Partners sheet schema."""
+    """Transform one raw partner record into the Partners sheet schema.
+
+    Enriched fields are read defensively from the master row, so a partner
+    details file produced before enrichment (without the new columns) still
+    renders with blank cells rather than failing.
+    """
     portfolios = _split_portfolios(_clean(row.get(PORTFOLIOS_COLUMN)))
     preferred, non_preferred = _classify_portfolios(portfolios)
 
@@ -333,8 +367,21 @@ def _build_partner_row(row: pd.Series) -> Dict[str, Any]:
     sec_net_spez = preferred_networking and preferred_security
     sec_ai_infra_spez = preferred_security and preferred_cloud_ai
 
+    contact_details = _format_contact_details(
+        _clean(row.get(PHONE_COLUMN)),
+        _clean(row.get(FAX_COLUMN)),
+    )
+
     return {
-        "Name": _clean(row.get(PARTNER_NAME_COLUMN)),
+        "Partner Name": _clean(row.get(PARTNER_NAME_COLUMN)),
+        "Website": _clean(row.get(WEBSITE_COLUMN)),
+        "Partner Since": _clean(row.get(PARTNER_SINCE_COLUMN)),
+        "Contact Details": contact_details,
+        "Description": _clean(row.get(DESCRIPTION_COLUMN)),
+        "Additional Locations": _clean(row.get(ADDITIONAL_LOCATIONS_COLUMN)),
+        "Industry Keywords": _clean(row.get(INDUSTRY_KEYWORDS_COLUMN)),
+        "Technology Keywords": _clean(row.get(TECHNOLOGY_KEYWORDS_COLUMN)),
+        "Company Size Keywords": _clean(row.get(COMPANY_SIZE_KEYWORDS_COLUMN)),
         "Preferred Portfolios": ", ".join(preferred),
         "Non Preferred Portfolios": ", ".join(non_preferred),
         "Preferred Networking": _yes_no(preferred_networking),

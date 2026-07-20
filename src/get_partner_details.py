@@ -144,6 +144,45 @@ def _extract_qualifications(qualifications: Any) -> Tuple[str, str]:
     return portfolio_value, competency_value
 
 
+def _join_values(value: Any) -> str:
+    """Normalize a keyword-style field into a delimiter-joined string.
+
+    Accepts a scalar (string, number, ``None``, or NaN) or a list/tuple.
+    List items are cleaned, empties dropped, and multiple items joined with
+    the qualification separator so the value stays machine-parseable in the
+    master CSV. Never raises on unexpected input.
+    """
+    if isinstance(value, (list, tuple)):
+        items = [_clean(item) for item in value]
+        return QUALIFICATION_SEPARATOR.join(item for item in items if item)
+    return _clean(value)
+
+
+def _render_additional_location(item: Any) -> str:
+    """Render a single additional-location entry as readable text."""
+    if isinstance(item, dict):
+        city = _clean(item.get("site_city"))
+        country = _clean(item.get("site_country"))
+        parts = [part for part in (city, country) if part]
+        if parts:
+            return LOCATION_SEPARATOR.join(parts)
+        return _clean(item.get("site_addr_1"))
+    return _clean(item)
+
+
+def _format_additional_locations(value: Any) -> str:
+    """Render the additionalLocations field as a delimiter-joined string.
+
+    A list of location entries (strings or objects) is converted to a
+    readable, separator-joined value; anything else is cleaned as a scalar.
+    Empty input yields an empty string.
+    """
+    if not isinstance(value, (list, tuple)):
+        return _clean(value)
+    rendered = [_render_additional_location(item) for item in value]
+    return QUALIFICATION_SEPARATOR.join(item for item in rendered if item)
+
+
 def _format_duration(seconds: float) -> str:
     """Render a duration in seconds as a compact ``h m s`` string."""
     total_seconds = int(round(seconds))
@@ -348,6 +387,17 @@ def extract_partner_data(
         "location": _build_location(city, country),
         "portfolios": portfolios,
         "competencies": competencies,
+        "fax": _clean(partner.get("site_fax")),
+        "additional_locations": _format_additional_locations(
+            partner.get("additionalLocations")
+        ),
+        "industry_keywords": _join_values(partner.get("industry_keywords")),
+        "technology_keywords": _join_values(
+            partner.get("technology_keywords")
+        ),
+        "company_size_keywords": _join_values(
+            partner.get("companysize_keywords")
+        ),
     }
 
 

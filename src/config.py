@@ -293,6 +293,11 @@ OUTPUT_COLUMNS = [
     "location",
     "portfolios",
     "competencies",
+    "fax",
+    "additional_locations",
+    "industry_keywords",
+    "technology_keywords",
+    "company_size_keywords",
 ]
 
 # Audit schema for partners that could not be collected.
@@ -371,7 +376,15 @@ PREFERRED_CLOUD_AI_PORTFOLIO = (
 # final Excel workbook.
 
 PARTNERS_SHEET_COLUMNS = [
-    "Name",
+    "Partner Name",
+    "Website",
+    "Partner Since",
+    "Contact Details",
+    "Description",
+    "Additional Locations",
+    "Industry Keywords",
+    "Technology Keywords",
+    "Company Size Keywords",
     "Preferred Portfolios",
     "Non Preferred Portfolios",
     "Preferred Networking",

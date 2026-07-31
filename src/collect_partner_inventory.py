@@ -229,11 +229,31 @@ def save_inventory(partners: List[Dict[str, Any]]) -> pd.DataFrame:
 
     frame = frame[frame[PARTNER_NAME_COLUMN].notna()]
 
-    before_count = len(frame)
-    frame = frame.drop_duplicates()
-    duplicates_removed = before_count - len(frame)
-    log(f"Duplicate Partners Removed : {duplicates_removed}")
+    # =========================================================
+# Duplicate Analysis
+# =========================================================
 
+duplicates = frame[
+    frame.duplicated(keep=False)
+].copy()
+
+duplicates.to_csv(
+    "data/duplicate_partners.csv",
+    index=False
+)
+
+before_count = len(frame)
+
+frame = frame.drop_duplicates()
+
+duplicates_removed = before_count - len(frame)
+
+log(f"Duplicate Partners Removed : {duplicates_removed}")
+
+log(
+    "Duplicate analysis saved : "
+    "data/duplicate_partners.csv"
+)
     frame = frame.sort_values(
         by=PARTNER_NAME_COLUMN,
         key=lambda column: column.str.casefold(),

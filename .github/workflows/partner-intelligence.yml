@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Every alternate Monday at 08:00 UTC (adjust as required)
+    # Every alternate Monday at 08:00 UTC
     - cron: "0 8 */14 * 1"
 
 permissions:
@@ -46,20 +46,42 @@ jobs:
         shell: pwsh
         run: python run_all.py
 
-      - name: Display Generated Files
+      - name: Display Generated Files & Diagnostics
         if: always()
         shell: pwsh
         run: |
           Write-Host ""
-          Write-Host "========== OUTPUT =========="
+          Write-Host "================ OUTPUT DIRECTORY ================"
           if (Test-Path output) {
-            Get-ChildItem output -Recurse
+            Get-ChildItem output -Recurse | Format-Table FullName, Length
+          } else {
+            Write-Host "Output directory not found."
           }
 
           Write-Host ""
-          Write-Host "========== DATA =========="
+          Write-Host "================ DATA DIRECTORY =================="
           if (Test-Path data) {
-            Get-ChildItem data -Recurse
+            Get-ChildItem data -Recurse | Format-Table FullName, Length
+          } else {
+            Write-Host "Data directory not found."
+          }
+
+          Write-Host ""
+          Write-Host "================ CSV ROW COUNTS =================="
+
+          if (Test-Path data) {
+            Get-ChildItem data -Filter *.csv | ForEach-Object {
+              $lines = (Get-Content $_.FullName).Count
+              $rows = [Math]::Max($lines - 1, 0)
+              Write-Host "$($_.Name): $rows rows"
+            }
+          }
+
+          Write-Host ""
+          Write-Host "================ JSON FILES ======================"
+
+          if (Test-Path output) {
+            Get-ChildItem output -Filter *.json
           }
 
       - name: Upload Business Report
@@ -70,10 +92,22 @@ jobs:
           path: output/
           retention-days: 30
 
+      - name: Upload Pipeline Data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cisco-Partner-Pipeline-${{ github.run_number }}
+          path: |
+            data/
+            output/
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Cisco-Partner-Logs-${{ github.run_number }}
           path: data/logs/
+          if-no-files-found: warn
           retention-days: 30
